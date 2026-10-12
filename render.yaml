@@ -17,4 +17,4 @@ databases:
   - name: resqai-db
     plan: free
     databaseName: disaster_response
-    user: postgres
+    user: resqai_user
