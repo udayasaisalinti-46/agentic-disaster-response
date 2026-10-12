@@ -26,7 +26,12 @@ import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
 import L from "leaflet";
 import "./App.css";
 
-const API = import.meta.env.VITE_API_URL || "";
+const API =
+  import.meta.env.VITE_API_URL ||
+  (typeof window !== "undefined" &&
+  (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+    ? ""
+    : "https://resqai-backend-vflw.onrender.com");
 
 // Custom marker pin generator
 function createPin(color: string, label: string) {
