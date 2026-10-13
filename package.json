@@ -1,0 +1,10 @@
+{
+  "name": "resqai-agentic-disaster-response",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Agentic AI Disaster Response & Resource Coordination Platform",
+  "scripts": {
+    "build": "npm --prefix frontend-app run build",
+    "dev": "npm --prefix frontend-app run dev"
+  }
+}
