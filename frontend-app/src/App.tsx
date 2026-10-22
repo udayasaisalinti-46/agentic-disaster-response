@@ -13,13 +13,16 @@ import {
   FileText,
   Flame,
   Layers,
+  Pause,
   Play,
   Radio,
   RefreshCw,
   RotateCcw,
+  Send,
   ShieldAlert,
   ShieldCheck,
   Sliders,
+  Sparkles,
   Thermometer,
   Truck,
   Users,
@@ -48,6 +51,53 @@ function createPin(color: string, label: string) {
     iconSize: [28, 28],
     iconAnchor: [14, 14],
   });
+}
+
+function MessageHandoffBanner({
+  incomingFrom,
+  incomingText,
+  agentAction,
+  outgoingTo,
+  outgoingText,
+}: {
+  incomingFrom: string;
+  incomingText: string;
+  agentAction: string;
+  outgoingTo: string;
+  outgoingText: string;
+}) {
+  return (
+    <div className="message-handoff-banner">
+      <div className="message-bubble-in">
+        <div className="message-bubble-label" style={{ color: "#2563eb" }}>
+          📥 Incoming Message From: <strong>{incomingFrom}</strong>
+        </div>
+        <p className="message-bubble-text">{incomingText}</p>
+      </div>
+
+      <div className="message-transfer-arrow">
+        <Send size={16} />
+        <span>MESSAGE HANDOFF</span>
+        <span style={{ fontSize: "8px", color: "#64748b" }}>{agentAction}</span>
+      </div>
+
+      <div className="message-bubble-out">
+        <div className="message-bubble-label" style={{ color: "#16a34a" }}>
+          📤 Outgoing Message To: <strong>{outgoingTo}</strong>
+        </div>
+        <p className="message-bubble-text">{outgoingText}</p>
+      </div>
+    </div>
+  );
+}
+
+function PlainEnglishCard({ text }: { text: string }) {
+  return (
+    <div className="plain-english-card">
+      <span className="plain-english-badge">PLAIN ENGLISH EXPLANATION</span>
+      <span>{text}</span>
+    </div>
+  );
 }
 
 // Data Types
@@ -416,6 +466,23 @@ export default function App() {
     const interval = setInterval(() => void refreshData(), 12000);
     return () => clearInterval(interval);
   }, [refreshData]);
+
+  // Live Simulation Player State (Automatic step-by-step agent demonstration)
+  const [isSimulating, setIsSimulating] = useState(false);
+
+  useEffect(() => {
+    if (!isSimulating) return;
+    const timer = setInterval(() => {
+      setPipelineStep((prev) => {
+        if (prev >= 9) {
+          setIsSimulating(false);
+          return 9;
+        }
+        return prev + 1;
+      });
+    }, 4200);
+    return () => clearInterval(timer);
+  }, [isSimulating]);
 
   // Handle Auto-redirect timer between agents
   useEffect(() => {
@@ -961,9 +1028,25 @@ export default function App() {
                 onClick={() => {
                   setActiveTab("pipeline");
                   setPipelineStep(1);
+                  setIsSimulating(true);
+                }}
+                style={{
+                  background: "linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)",
+                  boxShadow: "0 4px 20px rgba(59, 130, 246, 0.4)",
+                  border: "1px solid rgba(255, 255, 255, 0.2)",
                 }}
               >
-                <Workflow size={16} /> Launch 8-Agent Incident Pipeline ➔
+                <Sparkles size={16} /> ▶ Watch Live Agent Simulation (Steps 1–9)
+              </button>
+
+              <button
+                className="btn-hero btn-hero-secondary"
+                onClick={() => {
+                  setActiveTab("pipeline");
+                  setPipelineStep(1);
+                }}
+              >
+                <Workflow size={16} /> Interactive 8-Agent Pipeline ➔
               </button>
 
               <button className="btn-hero btn-hero-secondary" onClick={() => setActiveTab("dashboard")}>
@@ -1222,6 +1305,139 @@ export default function App() {
             </div>
           </div>
 
+          {/* Step-by-Step Procedure & Message Handoff Guide for All Users */}
+          <div className="panel" style={{ marginBottom: "24px", background: "linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)", border: "1px solid #cbd5e1" }}>
+            <div className="panel-heading">
+              <div className="panel-title">
+                <Send size={18} style={{ color: "#2563eb" }} />
+                <h2>How ResQAI Executes: Step-by-Step Procedure & Message Passing</h2>
+              </div>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => {
+                  setActiveTab("pipeline");
+                  setPipelineStep(1);
+                  setIsSimulating(true);
+                }}
+              >
+                <Sparkles size={13} /> ▶ Watch Live Simulation
+              </button>
+            </div>
+
+            <p style={{ fontSize: "12px", color: "#475569", margin: "0 0 16px 0", lineHeight: "1.6" }}>
+              In high-stakes emergencies, AI cannot be a chaotic black box. ResQAI organizes response operations into 
+              an <strong>8-stage deterministic chain</strong>. Each agent receives structured input messages, executes specialized tools, 
+              and transfers verified message packets to the next agent in milliseconds:
+            </p>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "12px" }}>
+              {[
+                {
+                  step: 1,
+                  name: "Agent 1: Intake & Deduplication",
+                  color: "#2563eb",
+                  bg: "#eff6ff",
+                  inMsg: "911 Call / Citizen SMS",
+                  outMsg: "Clean Incident Record (Duplicate Free)",
+                  desc: "Converts frantic natural language into structured coordinates and prevents duplicate dispatches.",
+                },
+                {
+                  step: 2,
+                  name: "Agent 2: Severity Triage",
+                  color: "#dc2626",
+                  bg: "#fef2f2",
+                  inMsg: "Clean Incident Record",
+                  outMsg: "Deterministic Priority Score (0-100)",
+                  desc: "Mathematically weights life threats, rising water depth, and hospitals to determine triage urgency.",
+                },
+                {
+                  step: 3,
+                  name: "Agent 3: Weather Radar",
+                  color: "#16a34a",
+                  bg: "#f0fdf4",
+                  inMsg: "Incident GPS Coordinates",
+                  outMsg: "Atmospheric Telemetry & Escalation",
+                  desc: "Queries live Open-Meteo API radar for torrential rains and triggers early priority escalation.",
+                },
+                {
+                  step: 4,
+                  name: "Agent 4: GIS & Route Accessibility",
+                  color: "#d97706",
+                  bg: "#fffbeb",
+                  inMsg: "Incident & Weather Alert",
+                  outMsg: "Passable Routes & Transit Modality",
+                  desc: "Checks road network vector data: identifies submerged roads and determines if boats or vehicles are needed.",
+                },
+                {
+                  step: 5,
+                  name: "Agent 5: Resource Inventory",
+                  color: "#7c3aed",
+                  bg: "#f5f3ff",
+                  inMsg: "Transit Modality & Headcount",
+                  outMsg: "Locked Fleet Units & Shelter Bed Status",
+                  desc: "Executes atomic inventory locks so vehicles cannot be double-booked by simultaneous incidents.",
+                },
+                {
+                  step: 6,
+                  name: "Agent 6: Allocation & Deficits",
+                  color: "#0891b2",
+                  bg: "#ecfeff",
+                  inMsg: "Fleet Inventory & Victim Count",
+                  outMsg: "Rescue Manifest & Deficit Alerts",
+                  desc: "Matches required seats to capacity. If resources are insufficient, it alerts without hallucination.",
+                },
+                {
+                  step: 7,
+                  name: "Agent 7: Coordination & Commander Sign-Off",
+                  color: "#e11d48",
+                  bg: "#fff1f2",
+                  inMsg: "Rescue Manifest & Staging Plan",
+                  outMsg: "Compiled IAP (PDF) with Human Signature",
+                  desc: "Drafts the Incident Action Plan and halts execution until the human Incident Commander authorizes.",
+                },
+                {
+                  step: 8,
+                  name: "Agent 8: Autonomous Safety Critic",
+                  color: "#9333ea",
+                  bg: "#faf5ff",
+                  inMsg: "Draft IAP & Commander Approval",
+                  outMsg: "Safety Certified Final Dispatch Order",
+                  desc: "Independent auditor checking 6 safety constraints. Ensures no wheeled units are sent into deep water.",
+                },
+              ].map((item) => (
+                <div
+                  key={item.step}
+                  style={{
+                    background: item.bg,
+                    border: `1px solid ${item.color}33`,
+                    borderRadius: "10px",
+                    padding: "14px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "8px",
+                    cursor: "pointer",
+                  }}
+                  onClick={() => {
+                    setActiveTab("pipeline");
+                    setPipelineStep(item.step);
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: "11px", fontWeight: 800, color: item.color }}>{item.name}</span>
+                    <span style={{ fontSize: "10px", background: "white", padding: "2px 6px", borderRadius: "4px", border: "1px solid #cbd5e1", fontWeight: 700 }}>
+                      Step {item.step}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: "11px", color: "#334155", margin: 0, lineHeight: 1.4 }}>{item.desc}</p>
+                  <div style={{ borderTop: "1px dashed rgba(0,0,0,0.1)", paddingTop: "8px", fontSize: "10px", display: "flex", flexDirection: "column", gap: "3px" }}>
+                    <div><span style={{ color: "#64748b" }}>📥 In:</span> <strong>{item.inMsg}</strong></div>
+                    <div><span style={{ color: "#64748b" }}>📤 Out:</span> <strong>{item.outMsg}</strong></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* Quick Problem Statement Scenarios */}
           <div className="panel">
             <div className="panel-heading">
@@ -1312,6 +1528,84 @@ export default function App() {
           ======================================================================== */}
       {activeTab === "pipeline" && (
         <div>
+          {/* Live Agent Simulation Controller Bar */}
+          <div className="sim-controller-card">
+            <div className="sim-controller-top">
+              <div className="sim-controller-title">
+                <Sparkles size={22} style={{ color: "#60a5fa" }} />
+                <div>
+                  <h3>Live Multi-Agent Procedure & Message Stream</h3>
+                  <p>Watch how agents sequentially receive, execute, and transfer structured messages across the pipeline</p>
+                </div>
+              </div>
+              <div className="sim-btn-group">
+                <button
+                  className={`btn-sim-play ${isSimulating ? "playing" : ""}`}
+                  onClick={() => {
+                    if (isSimulating) {
+                      setIsSimulating(false);
+                    } else {
+                      if (pipelineStep >= 9) setPipelineStep(1);
+                      setIsSimulating(true);
+                    }
+                  }}
+                >
+                  {isSimulating ? <Pause size={14} /> : <Play size={14} />}
+                  {isSimulating ? "Pause Simulation" : "▶ Play Live Agent Simulation"}
+                </button>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    setIsSimulating(false);
+                    setPipelineStep(1);
+                  }}
+                >
+                  <RotateCcw size={13} /> Reset to Agent 1
+                </button>
+              </div>
+            </div>
+
+            {/* Visual Agent Bus Track */}
+            <div className="agent-bus-track">
+              {[
+                { step: 1, name: "1. Intake", icon: Radio },
+                { step: 2, name: "2. Severity", icon: Activity },
+                { step: 3, name: "3. Weather", icon: CloudRain },
+                { step: 4, name: "4. GIS Routes", icon: Compass },
+                { step: 5, name: "5. Resources", icon: Truck },
+                { step: 6, name: "6. Allocation", icon: Sliders },
+                { step: 7, name: "7. Approval", icon: Users },
+                { step: 8, name: "8. Safety Critic", icon: ShieldCheck },
+                { step: 9, name: "9. Summary", icon: Workflow },
+              ].map((node, i) => {
+                const isPast = pipelineStep > node.step;
+                const isCurr = pipelineStep === node.step;
+                const IconC = node.icon;
+                return (
+                  <div key={node.step} style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                    <button
+                      className={`bus-node ${isCurr ? "active" : ""} ${isPast ? "completed" : ""}`}
+                      onClick={() => {
+                        setIsSimulating(false);
+                        setPipelineStep(node.step);
+                      }}
+                    >
+                      <div className="bus-node-circle">
+                        {isPast ? <CheckCircle2 size={15} /> : <IconC size={14} />}
+                      </div>
+                      <span style={{ fontSize: "10px", fontWeight: 700 }}>{node.name}</span>
+                    </button>
+                    {i < 8 && (
+                      <div className={`bus-connector-arrow ${pipelineStep > i + 1 ? "active" : ""}`}>
+                        ➔
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Stepper Navigation */}
           <div className="pipeline-stepper">
             {[
@@ -1426,6 +1720,16 @@ export default function App() {
                   Simulate Duplicate Report (TC-02)
                 </button>
               </div>
+
+              <PlainEnglishCard text="The Intake Agent acts as the digital 911 dispatcher. It ingests messy multi-source emergency calls and citizen reports, standardizes disaster parameters (people trapped, water height, GPS), and flags duplicate calls within a 500m radius so the rescue team is never double-dispatched." />
+
+              <MessageHandoffBanner
+                incomingFrom="Citizen 911 Calls, IoT Water Level Sensors & Field SMS"
+                incomingText="Raw citizen report: 'Flash flooding in Riverdale Zone A, water waist-deep and rising quickly, 40 people trapped in residential compound, elderly folks unable to walk!'"
+                agentAction="Extracts entities, resolves GPS coordinates (16.512, 80.641), and checks 500m radius duplicate index."
+                outgoingTo="Agent 2 (Severity Assessment Agent)"
+                outgoingText={`Standardized Incident Packet: { id: '${pipelineIncident.incident_id}', disaster: '${pipelineIncident.disaster_type}', location: '${pipelineIncident.location}', affected: ${pipelineIncident.people_affected}, urgency_level: ${pipelineIncident.urgency}, is_duplicate: false }`}
+              />
 
               <div className="grid-2">
                 {/* Ingestion Form */}
@@ -1616,6 +1920,16 @@ export default function App() {
                 </div>
               </div>
 
+              <PlainEnglishCard text="The Severity Agent is the emergency triage brain. It calculates a deterministic, un-hallucinated score (0 to 100) combining human life threat, water height, and vulnerable facilities. This ensures critical emergencies get prioritized first without human panic or bias." />
+
+              <MessageHandoffBanner
+                incomingFrom="Agent 1 (Intake & Deduplication Agent)"
+                incomingText={`Standardized Incident Packet: ${pipelineIncident.location}, ${pipelineIncident.people_affected} affected, Urgency Priority ${pipelineIncident.urgency}/5.`}
+                agentAction="Computes deterministic formula: LifeThreat(35) + HazardScale(25) + Vulnerability(18) = 78/100."
+                outgoingTo="Agent 3 (Weather Intelligence Agent)"
+                outgoingText={`Triage Priority Packet: { incident_id: '${pipelineIncident.incident_id}', score: 78, level: 'Critical', threats: ['Waist-deep water', 'Trapped elderly civilians'], requires_escalation: true }`}
+              />
+
               <div className="grid-2">
                 <div>
                   <h3 style={{ fontSize: "13px", fontWeight: 800, margin: "0 0 12px 0" }}>
@@ -1729,6 +2043,16 @@ export default function App() {
                   </button>
                 </div>
               </div>
+
+              <PlainEnglishCard text="The Weather Agent connects to real-time meteorological radar (Open-Meteo API). If heavy rainfall, gale-force winds, or lightning are bearing down on the incident area, it warns responders of worsening conditions and automatically escalates triage priority." />
+
+              <MessageHandoffBanner
+                incomingFrom="Agent 2 (Severity Assessment Agent)"
+                incomingText={`Triage Priority: ${pipelineIncident.location}, Priority 78 (Critical), GPS [16.512, 80.641].`}
+                agentAction="Pulls real-time Open-Meteo telemetry: Precipitation 16.5 mm/h (Heavy), Wind gust 62 km/h, Storm active."
+                outgoingTo="Agent 4 (Geospatial & Route Accessibility Agent)"
+                outgoingText="Weather Telemetry Packet: { rain_rate: '16.5 mm/h', wind: '62 km/h', storm_active: true, priority_escalation: +10, warning: 'Rapid flood expansion predicted' }"
+              />
 
               <div className="grid-2">
                 <div>
@@ -1854,6 +2178,16 @@ export default function App() {
                   </button>
                 </div>
               </div>
+
+              <PlainEnglishCard text="The Geospatial Agent analyzes road networks, bridge elevations, and water depth. It strictly distinguishes known road closures from safe detours, and tells the system what transit mode is required (e.g. standard roads are impassable, so only Rescue Boats can reach the victims)." />
+
+              <MessageHandoffBanner
+                incomingFrom="Agent 3 (Weather Intelligence Agent)"
+                incomingText={`Incident Location (${pipelineIncident.location}) + Weather Alert (16.5 mm/h rainfall).`}
+                agentAction="Computes spatial topology on road network; detects Bridge A is submerged and impassable for wheeled vehicles."
+                outgoingTo="Agent 5 (Emergency Resource Management Agent)"
+                outgoingText="GIS Route Packet: { route_status: 'Riverdale Access Road Underwater', transit_mode_required: 'Boat Only / Watercraft', target_shelter: 'Highland Community Shelter (4.2 km)' }"
+              />
 
               <div className="grid-2">
                 <div>
@@ -2017,6 +2351,16 @@ export default function App() {
                   </button>
                 </div>
               </div>
+
+              <PlainEnglishCard text="The Resource Agent manages the emergency fleet inventory (rescue boats, ambulances, drones). It locks vehicles in the database (Available ➔ Reserved) so two dispatchers cannot double-book the same boat, and monitors shelter bed capacities in real-time." />
+
+              <MessageHandoffBanner
+                incomingFrom="Agent 4 (Geospatial & Route Accessibility Agent)"
+                incomingText="Mission Requirement: 'Boat Only' transit required for 40 victims; evacuate to Highland Shelter."
+                agentAction="Applies atomic database lock on Available rescue boats; confirms Highland Shelter has 90 open beds."
+                outgoingTo="Agent 6 (Resource Allocation & Response Planning Agent)"
+                outgoingText="Fleet Inventory Packet: { available_boats: ['BOAT-001 (cap: 25)', 'BOAT-002 (cap: 20)'], shelter_capacity: 90 beds, state: 'RESERVED_FOR_DISPATCH' }"
+              />
 
               <div className="grid-2">
                 <div>
@@ -2195,6 +2539,16 @@ export default function App() {
                 </div>
               </div>
 
+              <PlainEnglishCard text="The Allocation Agent solves the rescue puzzle: it matches available rescue craft to victim headcounts. If there is a shortage (a deficit), it alerts the team immediately and formulates backup plans without hallucinating fake ambulances." />
+
+              <MessageHandoffBanner
+                incomingFrom="Agent 5 (Emergency Resource Management Agent)"
+                incomingText={`40 trapped victims at ${pipelineIncident.location}; 2 Rescue Boats reserved (Total capacity: 45).`}
+                agentAction="Calculates capacity deficit: 40 victims vs 45 capacity = Deficit: 0. Matches BOAT-001 & BOAT-002 to staging area."
+                outgoingTo="Agent 7 (Emergency Coordination & Action Agent)"
+                outgoingText="Tactical Dispatch Manifest Packet: { assigned_units: ['BOAT-001', 'BOAT-002'], staging_area: 'North Ridge Boat Ramp', est_evacuation_time: '35 mins', deficit: 0 }"
+              />
+
               <div className="grid-2">
                 <div>
                   <h3 style={{ fontSize: "13px", fontWeight: 800, margin: "0 0 12px 0" }}>
@@ -2324,6 +2678,16 @@ export default function App() {
                   </button>
                 </div>
               </div>
+
+              <PlainEnglishCard text="The Coordination Agent compiles all previous data into an official Incident Action Plan (IAP) with downloadable PDF orders. Most importantly, it enforces Human-in-the-Loop safety: no vehicles deploy until an authorized human Incident Commander reviews and signs off." />
+
+              <MessageHandoffBanner
+                incomingFrom="Agent 6 (Resource Allocation & Response Planning Agent)"
+                incomingText="Tactical Manifest: BOAT-001 & BOAT-002 staged at North Ridge Ramp for 40 evacuees."
+                agentAction="Compiles formal Incident Action Plan (IAP); prompts Incident Commander for mandatory cryptographic authorization."
+                outgoingTo="Agent 8 (Reviewer & Critic Agent)"
+                outgoingText="Draft IAP Packet: { iap_id: 'IAP-2026-001', authorized_by: 'Commander Sarah Jenkins', status: 'Pending Safety Critic Sanity Audit' }"
+              />
 
               <div className="grid-2">
                 <div>
@@ -2461,6 +2825,16 @@ export default function App() {
                 </div>
               </div>
 
+              <PlainEnglishCard text="The Safety Critic Agent is the autonomous safety auditor. It doesn't trust anyone: it cross-examines the plan to make sure wheeled ambulances aren't sent into deep water, no boat is double-booked, and the destination shelter isn't full. Only when 100% of safety checks pass does it certify the dispatch." />
+
+              <MessageHandoffBanner
+                incomingFrom="Agent 7 (Emergency Coordination & Action Agent)"
+                incomingText="Draft IAP signed by Commander for 2 rescue boats deployed to Riverdale Zone A."
+                agentAction="Executes 6 independent sanity rules: route clearance, double-allocation check, shelter headroom, and water depth."
+                outgoingTo="Incident Commander EOC Dashboard & Field Responders"
+                outgoingText="Certified Dispatch Packet: { safety_certified: true, contradictions_detected: 0, status: 'DISPATCH AUTHORIZED & SECURED', audit_stamp: 'CRITIC-PASS-7729' }"
+              />
+
               <div className="grid-2">
                 <div>
                   <h3 style={{ fontSize: "13px", fontWeight: 800, margin: "0 0 12px 0" }}>
@@ -2554,6 +2928,16 @@ export default function App() {
                   </button>
                 </div>
               </div>
+
+              <PlainEnglishCard text="The Orchestration View shows the compiled LangGraph StateGraph. All eight specialized agents ran in deterministic sequence, passing immutable state tokens, logging every decision, and producing a complete, life-saving rescue execution." />
+
+              <MessageHandoffBanner
+                incomingFrom="LangGraph StateGraph Compiled Runtime"
+                incomingText="Sequential node transitions completed from Node 1 (Intake) through Node 8 (Critic Audit)."
+                agentAction="Aggregates full audit telemetry, timing benchmarks, and serializes state graph JSON checkpoint."
+                outgoingTo="EOC Master Archive & Real-Time GIS Dispatch Ledger"
+                outgoingText="Workflow Execution Transcript: { state_checkpoint: 'SUCCESS', nodes_executed: 8, total_runtime_ms: 320, mission_ready: true }"
+              />
 
               {/* Execution Flow Diagram */}
               <div style={{ background: "#0f172a", color: "white", borderRadius: "12px", padding: "20px", marginBottom: "20px" }}>
