@@ -2167,19 +2167,38 @@ def reset_demo_seed():
 
 
 # ------------------------------------------------------------------------------
+# Automated Test Runner API (TC-01 through TC-08)
+# ------------------------------------------------------------------------------
+
+@app.post("/tests/run-all")
+@app.get("/tests/run-all")
+def run_all_tests_api():
+    """Execute all eight required acceptance tests (TC-01 through TC-08) and return structured report."""
+    from test_all_scenarios import run_tests
+    return run_tests()
+
+
+# ------------------------------------------------------------------------------
 # Static Files & Frontend Mount
 # ------------------------------------------------------------------------------
 
-FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 FRONTEND_APP_DIST = Path(__file__).resolve().parent.parent / "frontend-app" / "dist"
 
 if FRONTEND_APP_DIST.exists():
+    assets_dir = FRONTEND_APP_DIST / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
     app.mount("/app", StaticFiles(directory=FRONTEND_APP_DIST, html=True), name="frontend-app")
 
-if FRONTEND_DIR.exists():
-    app.mount("/frontend", StaticFiles(directory=FRONTEND_DIR), name="frontend")
-
     @app.get("/")
-    def serve_frontend():
-        return FileResponse(FRONTEND_DIR / "index.html")
+    def serve_frontend_root():
+        index_file = FRONTEND_APP_DIST / "index.html"
+        if index_file.exists():
+            return FileResponse(index_file)
+        return {
+            "status": "ResQAI Backend Online",
+            "message": "Frontend build not generated. Run npm run build in frontend-app.",
+        }
+
 

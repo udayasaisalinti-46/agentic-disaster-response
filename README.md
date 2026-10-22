@@ -174,28 +174,43 @@ When allocating resources, PostgreSQL row-level locks (`SELECT * FROM resources 
 
 ---
 
-## 5. Twelve Operational Frontend Pages
+## 5. Frontend Operations Center & 8-Agent Step-by-Step Journey
 
-The React 19 + TypeScript frontend (`frontend-app`) provides twelve specialized modules:
+The React 19 + TypeScript frontend (`frontend-app`) provides a crisis-themed Mission Control with both high-level operational modules and an interactive **8-Agent Pipeline** where **each agent acts as its own distinct page**:
 
-1. **Emergency Dashboard:** Comprehensive situational snapshot with real-time incident counters, resource availability, shelter capacity, and urgent watchlist.
-2. **Incident Center:** Multi-source intake form (Citizen, 911, Field Team, IoT, Gov Alert), duplicate detector, and incident register.
-3. **Live GIS Map:** Full interactive Leaflet map featuring custom-styled pins for incidents (color-coded by priority), available/deployed resources, shelters, and road closures.
-4. **Incident Details:** Deep-dive inspector displaying exact score breakdowns, intake validation, weather telemetry, and recommended actions.
-5. **Resource Center:** Complete inventory management with capability tags and interactive status transition controls (`Available` ➔ `Reserved` ➔ `Deployed` ➔ `Returning`).
-6. **Shelter Management:** Real-time capacity progress bars, occupancy updater, and saturation alerts (`>= 90% Near Full`, `100% Full`).
-7. **Route & Accessibility:** Road network status list, Known Closure vs. AI Inference tags, interactive road status toggles, and TC-05 dynamic replanning triggers.
-8. **Response Planning:** Interactive LangGraph 8-Agent workflow runner and resource shortage calculator.
-9. **Approval Center:** Human-in-the-loop authorization queue allowing commanders to Approve (deploys resource), Reject (releases resource), or Modify recommendations with signed comments.
-10. **Action Tracker:** Lifecycle tracking of tactical tasks (`Open` ➔ `In Progress` ➔ `Completed`), resource assignments, and timestamped remarks.
-11. **Alert Center:** Central notification hub logging Critical, Warning, and Info alerts with one-click acknowledgement.
-12. **Situation Reports & Tools:** ReportLab PDF situation report download button, worsening weather simulation tool (TC-07), and baseline scenario reset button.
+### A. The 8-Agent Step-by-Step Pipeline
+When an incident is reported, it passes through 8 dedicated, sequential interactive agent pages:
+1. **Agent 1 — Emergency Incident Intake Agent:** Ingests structured/unstructured reports, normalizes entities, and runs automated duplicate detection against the existing incident registry. Flags potential duplicates for commander review with similarity percentages rather than deleting. Features auto-advance countdown.
+2. **Agent 2 — Situation Assessment & Severity Agent:** Receives normalized data, assesses threats to population and infrastructure, and computes deterministic priority scores (0–100) with complete factor breakdown.
+3. **Agent 3 — Weather & Environmental Intelligence Agent:** Integrates live Open-Meteo meteorological telemetry (rainfall mm/h, wind speed, storm code) and evaluates whether weather escalation warrants priority elevation.
+4. **Agent 4 — Geospatial & Route Accessibility Agent:** Renders interactive Leaflet GIS map with incident and shelter coordinates. Strictly separates verified **Known Road Closures** from **AI-Inferred Accessibility Problems**, flagging unverified corridors as "Route Verification Required".
+5. **Agent 5 — Emergency Resource Management Agent:** Live inventory of rescue assets with full state machine (`Available` ➔ `Reserved` ➔ `Deployed` ➔ `Returning`) and serialized concurrency guards against double allocation. Monitors shelter capacity and triggers near-full/full warnings.
+6. **Agent 6 — Resource Allocation & Response Planning Agent:** Matches capabilities to incident needs, computes required vs. available fleet, calculates exact deficits without hallucinating uninvented equipment, and formulates mutual aid escalation plans.
+7. **Agent 7 — Emergency Coordination & Action Agent:** Compiles the complete Incident Action Plan (IAP) and enforces mandatory human commander authorization with Approve, Reject, and Modify controls.
+8. **Agent 8 — Reviewer & Critic Agent:** Autonomous safety auditor that verifies no duplicate allocations, checks road closure consistency, confirms mandatory human approval, and issues official Safety Certification.
+9. **Final Orchestration Summary:** Visual execution graph and full JSON StateGraph inspector.
+
+### B. Core Operational Views
+1. **Mission Briefing (Landing Page):** Crisis-themed command hub with live telemetry ribbon, 8-agent showcase, and 1-click scenario launchers.
+2. **Emergency Dashboard:** High-level operational overview, active incident summary, shelter capacity gauges, and road corridor status.
+3. **Incident Center:** Registry of all incidents, multi-source intake forms, and duplicate linking panels.
+4. **Live GIS Map:** Full interactive Leaflet map featuring color-coded pins for incidents, shelters, and fleet assets.
+5. **Incident Details:** Deep-dive inspector with mathematical priority breakdown and validation tags.
+6. **Resource Center:** Inventory management with interactive lifecycle status changers.
+7. **Shelter Management:** Deterministic capacity progress meters and saturation alerts.
+8. **Route & Accessibility:** Road network status with 1-click road closure simulation for dynamic replanning.
+9. **Response Planning:** Multi-agent plan generator and deficit calculator.
+10. **Approval Center:** Human-in-the-loop authorization queue for emergency commanders.
+11. **Action Tracker:** Response action lifecycle management (`Open` ➔ `In Progress` ➔ `Completed`).
+12. **Alert Center:** Central notification feed logging Critical, Warning, and Info events.
+13. **Situation Reports:** Standardized emergency situation report preview with 1-click ReportLab PDF download.
+14. **Verification Tests (TC-01–08):** Interactive in-browser test runner executing all 8 acceptance tests via `/tests/run-all`.
 
 ---
 
 ## 6. Acceptance Testing Scenarios (TC-01 through TC-08)
 
-All eight required test cases are automated in `test_all_scenarios.py`:
+All eight required test cases are automated in `test_all_scenarios.py` and exposed via the `/tests/run-all` API endpoint:
 
 | Test ID | Scenario | Expected Behavior | Result |
 |---|---|---|---|
@@ -208,9 +223,13 @@ All eight required test cases are automated in `test_all_scenarios.py`:
 | **TC-07** | Weather forecast worsens | Simulated severe storm (22.5mm rain, 55km/h wind) updates incident to `Needs Reassessment`. | **PASS** |
 | **TC-08** | Double allocation prevention | Serialized row locks grant Request 1 `HTTP 201` and reject Request 2 with `HTTP 409 Conflict`. | **PASS** |
 
-To execute the complete test suite:
+To execute the test suite from terminal:
 ```bash
 python test_all_scenarios.py
+```
+Or execute via the REST API:
+```bash
+curl -X GET http://127.0.0.1:8000/tests/run-all
 ```
 
 ---
@@ -224,7 +243,7 @@ python test_all_scenarios.py
 
 ### Step 1: Clone Repository & Virtual Environment
 ```bash
-git clone <repository-url>
+git clone https://github.com/udayasaisalinti-46/agentic-disaster-response.git
 cd agentic-disaster-response
 
 # Create and activate Python virtual environment
@@ -258,6 +277,7 @@ python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 * **API Documentation (Swagger UI):** `http://127.0.0.1:8000/docs`
 * **Health Check:** `http://127.0.0.1:8000/health`
 * **PDF Report Download:** `http://127.0.0.1:8000/reports/situation`
+* **Acceptance Test Suite:** `http://127.0.0.1:8000/tests/run-all`
 
 ### Step 4: Run Frontend Operations Center
 In a second terminal:
@@ -271,23 +291,24 @@ Open your browser at `http://localhost:5173`.
 ### Step 5: Production Build Verification
 To test frontend production bundling:
 ```bash
-cd frontend-app
 npm run build
 ```
 
 ---
 
-## 8. Deployment Architecture
+## 8. Live Deployments
 
-* **Backend Deployment (Render / Railway / AWS):**
-  * Runtime: Python 3.12
-  * Start Command: `uvicorn backend.main:app --host 0.0.0.0 --port $PORT`
-  * Database: Managed PostgreSQL (Set `DATABASE_URL` environment variable).
-* **Frontend Deployment (Vercel / Netlify):**
-  * Root Directory: `frontend-app`
-  * Build Command: `npm run build`
-  * Output Directory: `dist`
-  * Environment Variable: `VITE_API_URL=<deployed-backend-url>`
+* **Backend Deployment (Render):**
+  * Live URL: `https://resqai-backend-vflw.onrender.com`
+  * Swagger Docs: `https://resqai-backend-vflw.onrender.com/docs`
+  * Health Endpoint: `https://resqai-backend-vflw.onrender.com/health`
+  * Runtime: Python 3.12.8, Managed PostgreSQL (`resqai-db`)
+  * Configured via `render.yaml`
+* **Frontend Deployment (Vercel):**
+  * Deployed on Vercel via root `vercel.json` and `package.json`
+  * Framework: React 19 + TypeScript + Vite + Tailwind CSS + Leaflet GIS
+  * Build Command: `npm --prefix frontend-app run build`
+  * Output Directory: `frontend-app/dist`
 
 ---
 

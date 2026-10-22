@@ -196,11 +196,19 @@ def run_tests():
         and "INC-001" in data05["affected_incidents"]
     )
     results["TC-05"] = {
-        "scenario": "Dynamic replanning on road blockage",
+        "test_id": "TC-05",
+        "scenario": "Assigned road becomes blocked",
+        "expected_behavior": "Dynamic replanning triggered & coordinator alerted",
         "status": "PASS" if pass_tc05 else "FAIL",
-        "replanning_triggered": data05["dynamic_replanning_triggered"],
-        "affected_incidents": data05["affected_incidents"],
-        "affected_deployments_count": len(data05["affected_deployments"])
+        "agents_involved": ["Agent 4: Geospatial & Accessibility", "Agent 7: Emergency Coordination"],
+        "tool_calls": ["update_road_status", "evaluate_affected_deployments"],
+        "input_data": payload_tc05,
+        "actual_output": {
+            "replanning_triggered": data05["dynamic_replanning_triggered"],
+            "current_status": data05["current_status"],
+            "affected_incidents": data05["affected_incidents"],
+            "affected_deployments_count": len(data05["affected_deployments"])
+        }
     }
     print(f"  Result: {'PASS' if pass_tc05 else 'FAIL'} (Replanning Triggered: {data05['dynamic_replanning_triggered']}, Affected Incidents: {data05['affected_incidents']})")
 
@@ -227,11 +235,18 @@ def run_tests():
         and has_shelter_alert
     )
     results["TC-06"] = {
-        "scenario": "Shelter approaches capacity & triggers alerts",
+        "test_id": "TC-06",
+        "scenario": "Shelter approaches full capacity",
+        "expected_behavior": "Capacity alert generated (NEAR_FULL and FULL triggers)",
         "status": "PASS" if pass_tc06 else "FAIL",
-        "near_full_alert": data06_near["alert"],
-        "full_alert": data06_full["alert"],
-        "alert_recorded": has_shelter_alert
+        "agents_involved": ["Agent 5: Emergency Resource Management"],
+        "tool_calls": ["update_shelter_occupancy", "trigger_capacity_alert"],
+        "input_data": {"shelter": "SHELTER-A", "capacities_tested": [185, 200]},
+        "actual_output": {
+            "near_full_alert": data06_near["alert"],
+            "full_alert": data06_full["alert"],
+            "alert_recorded": has_shelter_alert
+        }
     }
     print(f"  Result: {'PASS' if pass_tc06 else 'FAIL'} (185/200: {data06_near['alert']}, 200/200: {data06_full['alert']}, Alert Logged: {has_shelter_alert})")
 
@@ -258,11 +273,18 @@ def run_tests():
         and inc_after["status"] == "Needs Reassessment"
     )
     results["TC-07"] = {
-        "scenario": "Worsening weather incident reassessment",
+        "test_id": "TC-07",
+        "scenario": "Weather forecast worsens",
+        "expected_behavior": "Relevant incidents reassessed & marked 'Needs Reassessment'",
         "status": "PASS" if pass_tc07 else "FAIL",
-        "severe_weather_detected": data07["severe_weather_detected"],
-        "incident_new_status": inc_after["status"],
-        "reassessment_recommended": data07["reassessment_recommended"]
+        "agents_involved": ["Agent 3: Weather & Environmental Intelligence", "Agent 2: Situation Assessment & Severity"],
+        "tool_calls": ["simulate_weather_storm", "reassess_incident_severity"],
+        "input_data": payload_tc07,
+        "actual_output": {
+            "severe_weather_detected": data07["severe_weather_detected"],
+            "incident_new_status": inc_after["status"],
+            "reassessment_recommended": data07["reassessment_recommended"]
+        }
     }
     print(f"  Result: {'PASS' if pass_tc07 else 'FAIL'} (Severe Weather: {data07['severe_weather_detected']}, New Status: {inc_after['status']})")
 
@@ -270,7 +292,6 @@ def run_tests():
     # TC-08: Same Rescue Resource Considered for Two Incidents -> Double Allocation Prevented
     # --------------------------------------------------------------------------
     print("\n[TC-08] Testing Double Allocation Prevention & Serialized Concurrency...")
-    # Reset baseline to ensure clean resource state
     reset_test_data()
 
     # Request 1: Allocate BOAT-001 to INC-001
@@ -283,22 +304,84 @@ def run_tests():
         and resp08_b.status_code == 409
     )
     results["TC-08"] = {
-        "scenario": "Double allocation prevention",
+        "test_id": "TC-08",
+        "scenario": "Same rescue resource considered for two incidents",
+        "expected_behavior": "Double allocation prevented with HTTP 409 Conflict",
         "status": "PASS" if pass_tc08 else "FAIL",
-        "request_1_status": resp08_a.status_code,
-        "request_2_status": resp08_b.status_code,
-        "conflict_message": resp08_b.json().get("detail")
+        "agents_involved": ["Agent 5: Resource Management", "Agent 8: Reviewer & Critic"],
+        "tool_calls": ["allocate_resource_with_lock", "single_allocation_guard"],
+        "input_data": {"resource_id": "BOAT-001", "incident_a": "INC-001", "incident_b": "INC-002"},
+        "actual_output": {
+            "request_1_status": resp08_a.status_code,
+            "request_2_status": resp08_b.status_code,
+            "conflict_message": resp08_b.json().get("detail")
+        }
     }
     print(f"  Result: {'PASS' if pass_tc08 else 'FAIL'} (Request 1: HTTP {resp08_a.status_code}, Request 2: HTTP {resp08_b.status_code} Conflict)")
+
+    # Fill metadata for TC-01 to TC-04 as well
+    results["TC-01"].update({
+        "test_id": "TC-01",
+        "expected_behavior": "Incident created and assessed with deterministic score",
+        "agents_involved": ["Agent 1: Incident Intake", "Agent 2: Situation Assessment & Severity"],
+        "tool_calls": ["calculate_priority_score", "database.insert_incident"],
+        "input_data": payload_tc01,
+        "actual_output": {"severity": data01["incident"]["severity_level"], "score": data01["incident"]["severity_score"]}
+    })
+
+    results["TC-02"].update({
+        "test_id": "TC-02",
+        "expected_behavior": "Potential duplicate identified and linked to existing incident",
+        "agents_involved": ["Agent 1: Emergency Incident Intake (Duplicate Detection)"],
+        "tool_calls": ["detect_duplicate_incidents", "similarity_scoring"],
+        "input_data": payload_tc02,
+        "actual_output": {
+            "duplicate_detected": data02["duplicate_detection"]["duplicate_detected"],
+            "linked_to": data02["incident"]["duplicate_of"],
+            "reason": data02["duplicate_detection"]["reason"]
+        }
+    })
+
+    results["TC-03"].update({
+        "test_id": "TC-03",
+        "expected_behavior": "Allocation recommendation generated via 8-Agent LangGraph workflow",
+        "agents_involved": ["All 8 Agents orchestrated via LangGraph StateGraph"],
+        "tool_calls": ["run_disaster_response_workflow", "emergency_coordination_action_agent"],
+        "input_data": payload_tc03,
+        "actual_output": {
+            "recommended_units": data03["resource_plan"]["recommended_quantity"],
+            "human_approval_required": data03["human_approval_required"],
+            "review_status": data03["review"]["review_status"]
+        }
+    })
+
+    results["TC-04"].update({
+        "test_id": "TC-04",
+        "expected_behavior": "Resource shortage identified and deficit calculated without hallucination",
+        "agents_involved": ["Agent 5: Resource Management", "Agent 6: Resource Allocation & Response Planning"],
+        "tool_calls": ["check_resource_shortage", "calculate_deficit"],
+        "input_data": payload_tc04,
+        "actual_output": {
+            "shortage_detected": data04["shortage_detected"],
+            "required": boat_check.get("required"),
+            "available": boat_check.get("available"),
+            "deficit": boat_check.get("deficit")
+        }
+    })
 
     print("\n" + "=" * 80)
     print("SUMMARY OF TEST RESULTS")
     print("=" * 80)
     all_passed = True
+    passed_count = 0
+    failed_count = 0
     for test_id, res in results.items():
         status = res["status"]
-        if status != "PASS":
+        if status == "PASS":
+            passed_count += 1
+        else:
             all_passed = False
+            failed_count += 1
         print(f"  {test_id}: {res['scenario']} --> [{status}]")
 
     print("=" * 80)
@@ -308,8 +391,15 @@ def run_tests():
         print("SOME TESTS FAILED! PLEASE REVIEW LOGS ABOVE.")
     print("=" * 80)
 
-    return all_passed
+    return {
+        "all_passed": all_passed,
+        "total": len(results),
+        "passed": passed_count,
+        "failed": failed_count,
+        "results": list(results.values())
+    }
 
 if __name__ == "__main__":
-    success = run_tests()
-    sys.exit(0 if success else 1)
+    report = run_tests()
+    sys.exit(0 if report["all_passed"] else 1)
+
