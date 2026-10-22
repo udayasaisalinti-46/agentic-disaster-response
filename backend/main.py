@@ -164,6 +164,19 @@ class WeatherSimulationRequest(BaseModel):
     weather_code: int = Field(ge=0)
 
 
+class SystemConfigUpdate(BaseModel):
+    commander_name: Optional[str] = Field(default=None, max_length=150)
+    commander_on_duty: Optional[str] = Field(default=None, max_length=150)
+    agency_name: Optional[str] = Field(default=None, max_length=150)
+    jurisdiction: Optional[str] = Field(default=None, max_length=150)
+    simulation_mode: Optional[bool] = None
+    autonomous_dispatch: Optional[bool] = None
+    double_allocation_lock: Optional[bool] = None
+    shelter_saturation_threshold: Optional[float] = None
+    weather_reassessment_auto: Optional[bool] = None
+    llm_fallback_enabled: Optional[bool] = None
+
+
 class ShortageCheckRequest(BaseModel):
     incident_id: str
     required_resources: dict[str, int]
@@ -805,6 +818,77 @@ def list_agents():
             "Distinction of Known Closures vs AI Inferences",
         ],
     }
+
+
+SYSTEM_CONFIG = {
+    "system_name": "ResQAI Emergency Operations Command System",
+    "version": "1.0.0",
+    "environment": "Academic Prototype / Decision-Support",
+    "commander_name": "Maj. EOC Auth-01",
+    "commander_on_duty": "Maj. EOC Auth-01",
+    "agency_name": "State Emergency Operations Center (SEOC)",
+    "jurisdiction": "Vijayawada / Krishna Basin, AP",
+    "llm_provider": "Gemini / OpenAI Hybrid (Deterministic Rule-Based Fallback Active)",
+    "weather_api": "Open-Meteo Meteorological Telemetry",
+    "routing_service": "OSRM / Topological Vector Graph",
+    "autonomous_dispatch": False,
+    "double_allocation_lock": True,
+    "shelter_saturation_threshold": 0.85,
+    "weather_reassessment_auto": True,
+    "alert_gateway": "Twilio / Gov SIM Active",
+    "active_agents": 8,
+    "human_approval_mandate": True,
+    "simulation_mode": True,
+    "supported_disasters": [
+        "Flood",
+        "Cyclone",
+        "Earthquake",
+        "Wildfire",
+        "Landslide",
+        "Industrial Accident",
+        "Urban Emergency",
+    ],
+}
+
+
+@app.get("/system/config")
+def get_system_config():
+    with get_connection() as conn:
+        engine = conn.engine
+    cfg = dict(SYSTEM_CONFIG)
+    cfg["database_engine"] = engine
+    cfg["db_backend"] = f"SQLite / {engine.capitalize()} Hybrid"
+    return cfg
+
+
+@app.patch("/system/config")
+def update_system_config(payload: SystemConfigUpdate):
+    if payload.commander_name is not None:
+        SYSTEM_CONFIG["commander_name"] = payload.commander_name
+        SYSTEM_CONFIG["commander_on_duty"] = payload.commander_name
+    if payload.commander_on_duty is not None:
+        SYSTEM_CONFIG["commander_on_duty"] = payload.commander_on_duty
+        SYSTEM_CONFIG["commander_name"] = payload.commander_on_duty
+    if payload.agency_name is not None:
+        SYSTEM_CONFIG["agency_name"] = payload.agency_name
+    if payload.jurisdiction is not None:
+        SYSTEM_CONFIG["jurisdiction"] = payload.jurisdiction
+    if payload.simulation_mode is not None:
+        SYSTEM_CONFIG["simulation_mode"] = payload.simulation_mode
+    if payload.autonomous_dispatch is not None:
+        SYSTEM_CONFIG["autonomous_dispatch"] = payload.autonomous_dispatch
+    if payload.double_allocation_lock is not None:
+        SYSTEM_CONFIG["double_allocation_lock"] = payload.double_allocation_lock
+    if payload.shelter_saturation_threshold is not None:
+        SYSTEM_CONFIG["shelter_saturation_threshold"] = payload.shelter_saturation_threshold
+    if payload.weather_reassessment_auto is not None:
+        SYSTEM_CONFIG["weather_reassessment_auto"] = payload.weather_reassessment_auto
+    with get_connection() as conn:
+        engine = conn.engine
+    cfg = dict(SYSTEM_CONFIG)
+    cfg["database_engine"] = engine
+    cfg["db_backend"] = f"SQLite / {engine.capitalize()} Hybrid"
+    return cfg
 
 
 # ------------------------------------------------------------------------------

@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   AlertOctagon,
   AlertTriangle,
   ArrowLeft,
+  Bell,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   CloudRain,
   Compass,
@@ -13,16 +16,20 @@ import {
   FileText,
   Flame,
   Layers,
+  Moon,
   Pause,
   Play,
   Radio,
   RefreshCw,
   RotateCcw,
+  Search,
   Send,
+  Settings,
   ShieldAlert,
   ShieldCheck,
   Sliders,
   Sparkles,
+  Sun,
   Thermometer,
   Truck,
   Users,
@@ -268,24 +275,97 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export type ActiveTab =
+  | "landing"
+  | "pipeline"
+  | "agents"
+  | "dashboard"
+  | "incidents"
+  | "map"
+  | "details"
+  | "resources"
+  | "shelters"
+  | "routes"
+  | "planning"
+  | "approvals"
+  | "actions"
+  | "alerts"
+  | "reports"
+  | "settings"
+  | "tests";
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState<
-    | "landing"
-    | "pipeline"
-    | "dashboard"
-    | "incidents"
-    | "map"
-    | "details"
-    | "resources"
-    | "shelters"
-    | "routes"
-    | "planning"
-    | "approvals"
-    | "actions"
-    | "alerts"
-    | "reports"
-    | "tests"
-  >("landing");
+  const [activeTab, setActiveTab] = useState<ActiveTab>("landing");
+
+  // Command Center Navigation, Theme & Global Search State
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("resqai_theme");
+      if (saved === "light" || saved === "dark") return saved;
+    }
+    return "dark";
+  });
+  const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("resqai_theme", theme);
+  }, [theme]);
+
+  // URL Hash Sync for bookmarkable/sharable deep-links to all 14 pages
+  useEffect(() => {
+    const handleHash = () => {
+      const hash = window.location.hash.replace("#", "").trim();
+      if (!hash) return;
+      if (hash.startsWith("incidents/")) {
+        const id = hash.replace("incidents/", "");
+        setSelectedIncidentId(id);
+        setActiveTab("details");
+      } else if (hash === "agents") {
+        setActiveTab("pipeline");
+      } else if (
+        [
+          "landing",
+          "pipeline",
+          "dashboard",
+          "incidents",
+          "details",
+          "map",
+          "resources",
+          "shelters",
+          "routes",
+          "planning",
+          "approvals",
+          "actions",
+          "alerts",
+          "reports",
+          "settings",
+          "tests",
+        ].includes(hash)
+      ) {
+        setActiveTab(hash as ActiveTab);
+      }
+    };
+    handleHash();
+    window.addEventListener("hashchange", handleHash);
+    return () => window.removeEventListener("hashchange", handleHash);
+  }, []);
+
+  const navigateTo = (tab: ActiveTab, incidentId?: string) => {
+    if (tab === "agents") {
+      setActiveTab("pipeline");
+      window.location.hash = "#agents";
+      return;
+    }
+    setActiveTab(tab);
+    if (incidentId) {
+      setSelectedIncidentId(incidentId);
+      window.location.hash = `#incidents/${incidentId}`;
+    } else {
+      window.location.hash = `#${tab}`;
+    }
+  };
 
   // Core Data States
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
@@ -302,6 +382,107 @@ export default function App() {
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
   const [selectedIncidentId, setSelectedIncidentId] = useState<string>("");
+
+  // System Configuration & Settings State
+  const [systemConfig, setSystemConfig] = useState<{
+    jurisdiction: string;
+    commander_on_duty: string;
+    autonomous_dispatch: boolean;
+    double_allocation_lock: boolean;
+    shelter_saturation_threshold: number;
+    weather_reassessment_auto: boolean;
+    alert_gateway: string;
+    db_backend: string;
+    active_agents: number;
+  }>({
+    jurisdiction: "Vijayawada / Krishna Basin, AP",
+    commander_on_duty: "Maj. EOC Auth-01",
+    autonomous_dispatch: false,
+    double_allocation_lock: true,
+    shelter_saturation_threshold: 0.85,
+    weather_reassessment_auto: true,
+    alert_gateway: "Twilio / Gov SIM Active",
+    db_backend: "SQLite / PostgreSQL Hybrid",
+    active_agents: 8,
+  });
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+  };
+
+  const handleUpdateConfig = async (patch: Partial<typeof systemConfig>) => {
+    try {
+      const updated = await apiFetch<typeof systemConfig>("/system/config", {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      });
+      setSystemConfig(updated);
+      setSuccessMsg("System configuration updated successfully.");
+      setTimeout(() => setSuccessMsg(""), 4000);
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : "Failed to update configuration");
+    }
+  };
+
+  const filteredSearchItems = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+    const results: Array<{ id?: string; label: string; sub: string; type: string; tab: ActiveTab }> = [];
+
+    for (const inc of incidents) {
+      if (
+        inc.incident_id.toLowerCase().includes(q) ||
+        inc.location.toLowerCase().includes(q) ||
+        inc.disaster_type.toLowerCase().includes(q) ||
+        inc.description.toLowerCase().includes(q)
+      ) {
+        results.push({
+          id: inc.incident_id,
+          label: `${inc.incident_id} — ${inc.location}`,
+          sub: `${inc.disaster_type} • Urgency ${inc.urgency}/5 • ${inc.status}`,
+          type: "Incident",
+          tab: "details",
+        });
+        if (results.length >= 8) break;
+      }
+    }
+
+    for (const sh of shelters) {
+      if (
+        sh.name.toLowerCase().includes(q) ||
+        sh.location.toLowerCase().includes(q) ||
+        sh.shelter_id.toLowerCase().includes(q)
+      ) {
+        results.push({
+          id: sh.shelter_id,
+          label: sh.name,
+          sub: `${sh.location} • Occupancy: ${sh.occupied}/${sh.total_capacity} (${sh.status})`,
+          type: "Shelter",
+          tab: "shelters",
+        });
+        if (results.length >= 10) break;
+      }
+    }
+
+    for (const res of resources) {
+      if (
+        res.name.toLowerCase().includes(q) ||
+        res.resource_type.toLowerCase().includes(q) ||
+        res.resource_id.toLowerCase().includes(q)
+      ) {
+        results.push({
+          id: res.resource_id,
+          label: res.name,
+          sub: `${res.resource_type} • Status: ${res.status}`,
+          type: "Resource",
+          tab: "resources",
+        });
+        if (results.length >= 12) break;
+      }
+    }
+
+    return results;
+  }, [searchQuery, incidents, shelters, resources]);
 
   // Step-by-Step Agent Pipeline State ("Each agent should act as one page")
   const [pipelineStep, setPipelineStep] = useState<number>(1);
@@ -427,6 +608,7 @@ export default function App() {
         apiFetch<{ actions: ResponseAction[] }>("/actions"),
         apiFetch<{ alerts: AlertItem[] }>("/alerts"),
         apiFetch<{ status: string }>("/health"),
+        apiFetch<typeof systemConfig>("/system/config"),
       ]);
 
       if (results[8].status === "fulfilled") setConnected(true);
@@ -451,6 +633,7 @@ export default function App() {
       if (results[5].status === "fulfilled") setApprovals(results[5].value.approvals || []);
       if (results[6].status === "fulfilled") setActions(results[6].value.actions || []);
       if (results[7].status === "fulfilled") setAlerts(results[7].value.alerts || []);
+      if (results[9].status === "fulfilled") setSystemConfig(results[9].value);
 
       setErrorMsg("");
     } catch (err: unknown) {
@@ -830,182 +1013,303 @@ export default function App() {
   const unreadAlertsCount = alerts.filter((a) => a.acknowledged === 0).length;
 
   return (
-    <main className="app-shell">
-      {/* Top Navigation Bar */}
-      <header className="topbar">
-        <div className="brand" onClick={() => setActiveTab("landing")} style={{ cursor: "pointer" }}>
-          <div className="brand-mark">
-            <ShieldAlert size={26} />
-          </div>
-          <div>
-            <div className="brand-name">
-              ResQ<span>AI</span>
+    <div className="command-center-shell">
+      {/* Persistent Collapsible Sidebar */}
+      <aside className={`command-sidebar ${isSidebarCollapsed ? "collapsed" : ""}`}>
+        <div className="sidebar-header">
+          <div className="sidebar-brand" onClick={() => navigateTo("landing")}>
+            <div className="sidebar-brand-icon">
+              <ShieldAlert size={20} />
             </div>
-            <div className="brand-subtitle">AGENTIC AI DISASTER RESPONSE PLATFORM</div>
+            {!isSidebarCollapsed && (
+              <div className="sidebar-brand-text">
+                ResQ<span>AI</span>
+              </div>
+            )}
           </div>
-        </div>
-
-        <div className="topbar-right">
-          <div className={`connection ${connected ? "online" : "offline"}`}>
-            <span className="connection-dot" />
-            {connected ? "PostgreSQL & FastAPI Online" : "Backend Offline"}
-          </div>
-
-          <button className="btn btn-secondary btn-sm" onClick={() => void handleResetDemoData()}>
-            <RotateCcw size={13} /> Reset Baseline Scenario
-          </button>
-
-          <a href={`${API}/reports/situation`} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm">
-            <FileDown size={14} /> Download PDF Report
-          </a>
-
-          <button className="refresh-button" onClick={() => void refreshData()} disabled={loading}>
-            <RefreshCw size={14} className={loading ? "spin" : ""} /> Refresh
+          <button
+            className="sidebar-toggle-btn"
+            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+            aria-label="Toggle Sidebar"
+          >
+            {isSidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
           </button>
         </div>
-      </header>
 
-      {/* Safety Notice Banner */}
-      <div className="safety-banner">
-        <AlertOctagon size={20} />
-        <div>
-          <strong>Human-in-the-Loop Operational Mandate Active</strong>
-          <span>
-            AI recommendations are advisory decision-support. Autonomous dispatch of physical rescue personnel,
-            road closures, and medical triage are strictly prohibited and require authorized emergency commander authorization.
-          </span>
+        <div className="sidebar-scroll-wrap">
+          <div className="sidebar-section-title">COMMAND & CONTROL</div>
+          <button
+            className={`sidebar-item-btn ${activeTab === "landing" ? "active" : ""}`}
+            onClick={() => navigateTo("landing")}
+            title="Mission Briefing"
+          >
+            <span className="sidebar-item-icon"><Radio size={16} /></span>
+            {!isSidebarCollapsed && <span className="sidebar-item-label">Mission Briefing</span>}
+          </button>
+          <button
+            className={`sidebar-item-btn ${activeTab === "dashboard" ? "active" : ""}`}
+            onClick={() => navigateTo("dashboard")}
+            title="Emergency Dashboard"
+          >
+            <span className="sidebar-item-icon"><Activity size={16} /></span>
+            {!isSidebarCollapsed && <span className="sidebar-item-label">Emergency Dashboard</span>}
+          </button>
+          <button
+            className={`sidebar-item-btn ${activeTab === "pipeline" || activeTab === "agents" ? "active" : ""}`}
+            onClick={() => navigateTo("pipeline")}
+            title="8-Agent AI Monitor"
+          >
+            <span className="sidebar-item-icon"><Workflow size={16} /></span>
+            {!isSidebarCollapsed && <span className="sidebar-item-label">AI Agent Monitor</span>}
+            {!isSidebarCollapsed && <span className="sidebar-badge">{pipelineStep}/9</span>}
+          </button>
+          <button
+            className={`sidebar-item-btn ${activeTab === "approvals" ? "active" : ""}`}
+            onClick={() => navigateTo("approvals")}
+            title="Approval Center"
+          >
+            <span className="sidebar-item-icon"><Users size={16} /></span>
+            {!isSidebarCollapsed && <span className="sidebar-item-label">Approval Center</span>}
+            {pendingApprovalsCount > 0 && (
+              <span className="sidebar-badge pending-badge">{pendingApprovalsCount}</span>
+            )}
+          </button>
+
+          <div className="sidebar-section-title">OPERATIONS</div>
+          <button
+            className={`sidebar-item-btn ${activeTab === "incidents" ? "active" : ""}`}
+            onClick={() => navigateTo("incidents")}
+            title="Incident Center"
+          >
+            <span className="sidebar-item-icon"><Radio size={16} /></span>
+            {!isSidebarCollapsed && <span className="sidebar-item-label">Incident Center</span>}
+            {incidents.length > 0 && <span className="sidebar-badge">{incidents.length}</span>}
+          </button>
+          <button
+            className={`sidebar-item-btn ${activeTab === "details" ? "active" : ""}`}
+            onClick={() => navigateTo("details")}
+            title="Incident Details"
+          >
+            <span className="sidebar-item-icon"><FileText size={16} /></span>
+            {!isSidebarCollapsed && <span className="sidebar-item-label">Incident Details</span>}
+          </button>
+          <button
+            className={`sidebar-item-btn ${activeTab === "map" ? "active" : ""}`}
+            onClick={() => navigateTo("map")}
+            title="Live GIS Map"
+          >
+            <span className="sidebar-item-icon"><Compass size={16} /></span>
+            {!isSidebarCollapsed && <span className="sidebar-item-label">Live GIS Map</span>}
+          </button>
+          <button
+            className={`sidebar-item-btn ${activeTab === "planning" ? "active" : ""}`}
+            onClick={() => navigateTo("planning")}
+            title="Response Planning"
+          >
+            <span className="sidebar-item-icon"><Sliders size={16} /></span>
+            {!isSidebarCollapsed && <span className="sidebar-item-label">Response Planning</span>}
+          </button>
+          <button
+            className={`sidebar-item-btn ${activeTab === "actions" ? "active" : ""}`}
+            onClick={() => navigateTo("actions")}
+            title="Action Tracker"
+          >
+            <span className="sidebar-item-icon"><Clock size={16} /></span>
+            {!isSidebarCollapsed && <span className="sidebar-item-label">Action Tracker</span>}
+          </button>
+
+          <div className="sidebar-section-title">LOGISTICS & NETWORK</div>
+          <button
+            className={`sidebar-item-btn ${activeTab === "resources" ? "active" : ""}`}
+            onClick={() => navigateTo("resources")}
+            title="Resource Inventory"
+          >
+            <span className="sidebar-item-icon"><Truck size={16} /></span>
+            {!isSidebarCollapsed && <span className="sidebar-item-label">Resource Center</span>}
+          </button>
+          <button
+            className={`sidebar-item-btn ${activeTab === "shelters" ? "active" : ""}`}
+            onClick={() => navigateTo("shelters")}
+            title="Shelter Management"
+          >
+            <span className="sidebar-item-icon"><Warehouse size={16} /></span>
+            {!isSidebarCollapsed && <span className="sidebar-item-label">Shelter Network</span>}
+          </button>
+          <button
+            className={`sidebar-item-btn ${activeTab === "routes" ? "active" : ""}`}
+            onClick={() => navigateTo("routes")}
+            title="Route & Accessibility"
+          >
+            <span className="sidebar-item-icon"><Layers size={16} /></span>
+            {!isSidebarCollapsed && <span className="sidebar-item-label">Route Network</span>}
+            {roads.some((r) => r.status === "Closed") && (
+              <span className="sidebar-badge alert-badge">Alert</span>
+            )}
+          </button>
+          <button
+            className={`sidebar-item-btn ${activeTab === "alerts" ? "active" : ""}`}
+            onClick={() => navigateTo("alerts")}
+            title="Alert Center"
+          >
+            <span className="sidebar-item-icon"><Bell size={16} /></span>
+            {!isSidebarCollapsed && <span className="sidebar-item-label">Alert Center</span>}
+            {unreadAlertsCount > 0 && (
+              <span className="sidebar-badge alert-badge">{unreadAlertsCount}</span>
+            )}
+          </button>
+
+          <div className="sidebar-section-title">SYSTEM & AUDIT</div>
+          <button
+            className={`sidebar-item-btn ${activeTab === "reports" ? "active" : ""}`}
+            onClick={() => navigateTo("reports")}
+            title="Situation Reports"
+          >
+            <span className="sidebar-item-icon"><FileDown size={16} /></span>
+            {!isSidebarCollapsed && <span className="sidebar-item-label">Situation Reports</span>}
+          </button>
+          <button
+            className={`sidebar-item-btn ${activeTab === "tests" ? "active" : ""}`}
+            onClick={() => navigateTo("tests")}
+            title="Verification Test Suite (TC-01–08)"
+          >
+            <span className="sidebar-item-icon"><CheckCircle2 size={16} /></span>
+            {!isSidebarCollapsed && <span className="sidebar-item-label">Acceptance Tests</span>}
+          </button>
+          <button
+            className={`sidebar-item-btn ${activeTab === "settings" ? "active" : ""}`}
+            onClick={() => navigateTo("settings")}
+            title="System Settings"
+          >
+            <span className="sidebar-item-icon"><Settings size={16} /></span>
+            {!isSidebarCollapsed && <span className="sidebar-item-label">System Settings</span>}
+          </button>
         </div>
-        <span className="badge badge-amber">Commander Gate Active</span>
-      </div>
+      </aside>
 
-      {/* Error & Success Messages */}
-      {errorMsg && (
-        <div className="notice notice-warning">
-          <AlertTriangle size={18} />
-          <div>
-            <strong>System Notice:</strong>
-            <p>{errorMsg}</p>
+      {/* Main Command Area */}
+      <div className="command-main-area">
+        {/* Sticky Command Topbar */}
+        <header className="command-topbar">
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            {/* Global Search with Dropdown Results */}
+            <div className="global-search-container">
+              <Search size={14} className="global-search-icon" />
+              <input
+                type="text"
+                placeholder="Global search (Incidents, Shelters, Assets)..."
+                className="global-search-input"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              {filteredSearchItems.length > 0 && (
+                <div className="search-dropdown-menu">
+                  {filteredSearchItems.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="search-dropdown-item"
+                      onClick={() => {
+                        setSearchQuery("");
+                        if (item.tab === "details" && item.id) {
+                          setSelectedIncidentId(item.id);
+                        }
+                        navigateTo(item.tab, item.id);
+                      }}
+                    >
+                      <div>
+                        <strong>{item.label}</strong>
+                        <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>{item.sub}</div>
+                      </div>
+                      <span className="badge badge-gray" style={{ fontSize: "9px" }}>{item.type}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="sim-pill">
+              <span className="connection-dot" style={{ width: 6, height: 6 }} />
+              {connected ? "PostgreSQL & FastAPI Online" : "Backend Offline"}
+            </div>
           </div>
-        </div>
-      )}
-      {successMsg && (
-        <div className="notice-success">
-          <CheckCircle2 size={18} />
-          <div>
-            <strong>Operation Complete:</strong>
-            <p>{successMsg}</p>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div className="commander-pill">
+              <ShieldAlert size={14} style={{ color: "#ef4444" }} />
+              <span>Commander: <strong>{systemConfig.commander_on_duty}</strong></span>
+            </div>
+
+            <button
+              className="theme-toggle-btn"
+              onClick={toggleTheme}
+              title={`Switch to ${theme === "dark" ? "Light" : "Dark"} Mode`}
+            >
+              {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+            </button>
+
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => void handleResetDemoData()}
+              title="Reset Baseline Scenario Data"
+            >
+              <RotateCcw size={13} /> Reset Baseline
+            </button>
+
+            <a
+              href={`${API}/reports/situation`}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-primary btn-sm"
+              title="Download Situation Report PDF"
+            >
+              <FileDown size={14} /> PDF Report
+            </a>
+
+            <button
+              className="refresh-button"
+              onClick={() => void refreshData()}
+              disabled={loading}
+              title="Refresh live system state"
+            >
+              <RefreshCw size={14} className={loading ? "spin" : ""} />
+            </button>
           </div>
-        </div>
-      )}
+        </header>
 
-      {/* Main Navigation Tabs */}
-      <nav className="nav-tabs" aria-label="Operational views">
-        <button
-          className={`nav-tab ${activeTab === "landing" ? "active" : ""}`}
-          onClick={() => setActiveTab("landing")}
-        >
-          <Radio size={15} /> Mission Briefing
-        </button>
+        {/* Existing app-shell content container */}
+        <div className="app-shell" style={{ maxWidth: "100%", padding: "18px 24px" }}>
+          {/* Safety Notice Banner */}
+          <div className="safety-banner">
+            <AlertOctagon size={20} />
+            <div>
+              <strong>Human-in-the-Loop Operational Mandate Active</strong>
+              <span>
+                AI recommendations are advisory decision-support. Autonomous dispatch of physical rescue personnel,
+                road closures, and medical triage are strictly prohibited and require authorized emergency commander authorization.
+              </span>
+            </div>
+            <span className="badge badge-amber">Commander Gate Active</span>
+          </div>
 
-        <button
-          className={`nav-tab ${activeTab === "pipeline" ? "active" : ""}`}
-          onClick={() => setActiveTab("pipeline")}
-        >
-          <Workflow size={15} /> 8-Agent Pipeline
-          <span className="nav-badge" style={{ background: "#3b82f6", color: "white" }}>
-            Step {pipelineStep}/9
-          </span>
-        </button>
-
-        <button
-          className={`nav-tab ${activeTab === "dashboard" ? "active" : ""}`}
-          onClick={() => setActiveTab("dashboard")}
-        >
-          <Activity size={15} /> Emergency Dashboard
-        </button>
-
-        <button
-          className={`nav-tab ${activeTab === "incidents" ? "active" : ""}`}
-          onClick={() => setActiveTab("incidents")}
-        >
-          <Radio size={15} /> Incident Center
-          {incidents.length > 0 && <span className="nav-badge">{incidents.length}</span>}
-        </button>
-
-        <button className={`nav-tab ${activeTab === "map" ? "active" : ""}`} onClick={() => setActiveTab("map")}>
-          <Compass size={15} /> Live GIS Map
-        </button>
-
-        <button
-          className={`nav-tab ${activeTab === "details" ? "active" : ""}`}
-          onClick={() => setActiveTab("details")}
-        >
-          <FileText size={15} /> Incident Details
-        </button>
-
-        <button
-          className={`nav-tab ${activeTab === "resources" ? "active" : ""}`}
-          onClick={() => setActiveTab("resources")}
-        >
-          <Truck size={15} /> Resource Center
-        </button>
-
-        <button
-          className={`nav-tab ${activeTab === "shelters" ? "active" : ""}`}
-          onClick={() => setActiveTab("shelters")}
-        >
-          <Warehouse size={15} /> Shelter Management
-        </button>
-
-        <button className={`nav-tab ${activeTab === "routes" ? "active" : ""}`} onClick={() => setActiveTab("routes")}>
-          <Layers size={15} /> Route & Accessibility
-          {roads.some((r) => r.status === "Closed") && <span className="nav-badge">Closed</span>}
-        </button>
-
-        <button
-          className={`nav-tab ${activeTab === "planning" ? "active" : ""}`}
-          onClick={() => setActiveTab("planning")}
-        >
-          <Sliders size={15} /> Response Planning
-        </button>
-
-        <button
-          className={`nav-tab ${activeTab === "approvals" ? "active" : ""}`}
-          onClick={() => setActiveTab("approvals")}
-        >
-          <Users size={15} /> Approval Center
-          {pendingApprovalsCount > 0 && <span className="nav-badge">{pendingApprovalsCount}</span>}
-        </button>
-
-        <button
-          className={`nav-tab ${activeTab === "actions" ? "active" : ""}`}
-          onClick={() => setActiveTab("actions")}
-        >
-          <Clock size={15} /> Action Tracker
-        </button>
-
-        <button
-          className={`nav-tab ${activeTab === "alerts" ? "active" : ""}`}
-          onClick={() => setActiveTab("alerts")}
-        >
-          <AlertTriangle size={15} /> Alert Center
-          {unreadAlertsCount > 0 && <span className="nav-badge">{unreadAlertsCount}</span>}
-        </button>
-
-        <button
-          className={`nav-tab ${activeTab === "reports" ? "active" : ""}`}
-          onClick={() => setActiveTab("reports")}
-        >
-          <FileDown size={15} /> Situation Reports
-        </button>
-
-        <button
-          className={`nav-tab ${activeTab === "tests" ? "active" : ""}`}
-          onClick={() => setActiveTab("tests")}
-        >
-          <CheckCircle2 size={15} /> Verification Tests (TC-01–08)
-        </button>
-      </nav>
+          {/* Error & Success Messages */}
+          {errorMsg && (
+            <div className="notice notice-warning">
+              <AlertTriangle size={18} />
+              <div>
+                <strong>System Notice:</strong>
+                <p>{errorMsg}</p>
+              </div>
+            </div>
+          )}
+          {successMsg && (
+            <div className="notice-success">
+              <CheckCircle2 size={18} />
+              <div>
+                <strong>Operation Complete:</strong>
+                <p>{successMsg}</p>
+              </div>
+            </div>
+          )}
 
       {/* ========================================================================
           VIEW 1: MISSION BRIEFING / LANDING PAGE (Rich Crisis Theme)
@@ -4166,6 +4470,250 @@ export default function App() {
         </div>
       )}
 
+      {/* ========================================================================
+          VIEW 14: SYSTEM SETTINGS & ARCHITECTURE CONFIGURATION
+          ======================================================================== */}
+      {activeTab === "settings" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          <div className="section-header" style={{ marginBottom: 0 }}>
+            <div>
+              <h2 style={{ margin: "0 0 4px 0", display: "flex", alignItems: "center", gap: "8px" }}>
+                <Settings size={22} style={{ color: "#38bdf8" }} /> System Configuration & Architecture Control
+              </h2>
+              <p style={{ margin: 0, fontSize: "12px", color: "var(--text-muted)" }}>
+                Multi-agent orchestration policies, environmental sensor streams, GIS coordinate systems, and database connectivity.
+              </p>
+            </div>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => void handleResetDemoData()}
+              >
+                <RotateCcw size={13} /> Reset Baseline State
+              </button>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => void handleRunAllTests()}
+                disabled={testsLoading}
+              >
+                <CheckCircle2 size={13} /> Run Acceptance Suite
+              </button>
+            </div>
+          </div>
+
+          <div className="settings-grid">
+            {/* Card 1: Operational Profile */}
+            <div className="settings-card">
+              <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
+                <Compass size={16} style={{ color: "#38bdf8" }} /> Operational Profile & Jurisdiction
+              </h3>
+              <div className="settings-row">
+                <span style={{ color: "var(--text-muted)" }}>Active Scenario:</span>
+                <strong>Krishna River Basin Monsoon Surge</strong>
+              </div>
+              <div className="settings-row">
+                <span style={{ color: "var(--text-muted)" }}>Jurisdiction Area:</span>
+                <strong>{systemConfig.jurisdiction}</strong>
+              </div>
+              <div className="settings-row">
+                <span style={{ color: "var(--text-muted)" }}>GIS Coordinates:</span>
+                <span className="mono">16.5062° N, 80.6480° E (EPSG:4326)</span>
+              </div>
+              <div className="settings-row">
+                <span style={{ color: "var(--text-muted)" }}>Commander on Duty:</span>
+                <input
+                  type="text"
+                  value={systemConfig.commander_on_duty}
+                  onChange={(e) => setSystemConfig({ ...systemConfig, commander_on_duty: e.target.value })}
+                  onBlur={() => void handleUpdateConfig({ commander_on_duty: systemConfig.commander_on_duty })}
+                  style={{
+                    padding: "3px 8px",
+                    borderRadius: "4px",
+                    fontSize: "11px",
+                    width: "160px",
+                    textAlign: "right",
+                  }}
+                />
+              </div>
+              <div className="settings-row">
+                <span style={{ color: "var(--text-muted)" }}>EOC Status:</span>
+                <span className="badge badge-green">LEVEL 1 FULL ACTIVATION</span>
+              </div>
+            </div>
+
+            {/* Card 2: Multi-Agent Orchestration Engine */}
+            <div className="settings-card">
+              <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
+                <Workflow size={16} style={{ color: "#a855f7" }} /> Multi-Agent Orchestration Engine
+              </h3>
+              <div className="settings-row">
+                <span style={{ color: "var(--text-muted)" }}>Framework:</span>
+                <strong>LangGraph StateGraph + Pydantic v2</strong>
+              </div>
+              <div className="settings-row">
+                <span style={{ color: "var(--text-muted)" }}>Active Pipeline Agents:</span>
+                <span className="badge badge-blue">8 Specialized Agents + 1 Critic</span>
+              </div>
+              <div className="settings-row">
+                <span style={{ color: "var(--text-muted)" }}>Execution Mode:</span>
+                <span>Deterministic State Machine + Advisory</span>
+              </div>
+              <div className="settings-row">
+                <span style={{ color: "var(--text-muted)" }}>Safety Auditor (Critic):</span>
+                <span className="badge badge-green">STRICT VERIFICATION ACTIVE</span>
+              </div>
+              <div className="settings-row">
+                <span style={{ color: "var(--text-muted)" }}>Step-by-Step Auto Advance:</span>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  style={{ padding: "2px 8px", fontSize: "10px" }}
+                  onClick={() => setAutoRedirectEnabled(!autoRedirectEnabled)}
+                >
+                  {autoRedirectEnabled ? "ENABLED (4s)" : "MANUAL CLICKS"}
+                </button>
+              </div>
+            </div>
+
+            {/* Card 3: Environmental & Telemetry Feeds */}
+            <div className="settings-card">
+              <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
+                <CloudRain size={16} style={{ color: "#06b6d4" }} /> Environmental Feeds & Integrations
+              </h3>
+              <div className="settings-row">
+                <span style={{ color: "var(--text-muted)" }}>Weather Telemetry API:</span>
+                <span className="badge badge-green">Open-Meteo REST API (Online)</span>
+              </div>
+              <div className="settings-row">
+                <span style={{ color: "var(--text-muted)" }}>GDACS Global Alerts:</span>
+                <span className="badge badge-green">RSS/GeoJSON Feed Synced</span>
+              </div>
+              <div className="settings-row">
+                <span style={{ color: "var(--text-muted)" }}>GIS Base Map:</span>
+                <span>OpenStreetMap CartoDB Dark/Positron</span>
+              </div>
+              <div className="settings-row">
+                <span style={{ color: "var(--text-muted)" }}>Alert Gateway:</span>
+                <strong>{systemConfig.alert_gateway}</strong>
+              </div>
+              <div className="settings-row">
+                <span style={{ color: "var(--text-muted)" }}>Weather Auto-Reassessment:</span>
+                <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={systemConfig.weather_reassessment_auto}
+                    onChange={(e) => {
+                      const val = e.target.checked;
+                      setSystemConfig({ ...systemConfig, weather_reassessment_auto: val });
+                      void handleUpdateConfig({ weather_reassessment_auto: val });
+                    }}
+                  />
+                  <span>{systemConfig.weather_reassessment_auto ? "Active" : "Disabled"}</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Card 4: Database & State Persistence */}
+            <div className="settings-card">
+              <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
+                <Database size={16} style={{ color: "#10b981" }} /> Database & System Persistence
+              </h3>
+              <div className="settings-row">
+                <span style={{ color: "var(--text-muted)" }}>Active Engine:</span>
+                <strong>{systemConfig.db_backend}</strong>
+              </div>
+              <div className="settings-row">
+                <span style={{ color: "var(--text-muted)" }}>Schema Version:</span>
+                <span className="mono">v2.4-Production</span>
+              </div>
+              <div className="settings-row">
+                <span style={{ color: "var(--text-muted)" }}>Active Incident Records:</span>
+                <span className="mono">{incidents.length} Records</span>
+              </div>
+              <div className="settings-row">
+                <span style={{ color: "var(--text-muted)" }}>Fleet Inventory Count:</span>
+                <span className="mono">{resources.length} Units</span>
+              </div>
+              <div className="settings-row">
+                <span style={{ color: "var(--text-muted)" }}>Shelters in Registry:</span>
+                <span className="mono">{shelters.length} Facilities</span>
+              </div>
+              <div className="settings-row">
+                <span style={{ color: "var(--text-muted)" }}>Road Segments Tracked:</span>
+                <span className="mono">{roads.length} Segments</span>
+              </div>
+            </div>
+
+            {/* Card 5: Safety Policies & Commander Gates */}
+            <div className="settings-card" style={{ gridColumn: "1 / -1" }}>
+              <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
+                <ShieldAlert size={16} style={{ color: "#ef4444" }} /> Safety Guardrails & Policy Thresholds
+              </h3>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" }}>
+                <div style={{ padding: "12px", background: "var(--bg-card)", borderRadius: "8px", border: "1px solid var(--border-main)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                    <strong>Autonomous Dispatch Lock</strong>
+                    <span className="badge badge-amber">SAFETY CRITICAL</span>
+                  </div>
+                  <p style={{ fontSize: "11px", color: "var(--text-muted)", margin: "0 0 10px 0" }}>
+                    Prohibits autonomous deployment of physical response assets without human commander sign-off.
+                  </p>
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "11px", cursor: "not-allowed" }}>
+                    <input type="checkbox" checked={!systemConfig.autonomous_dispatch} disabled />
+                    <strong>Mandatory Human Gate Enforced (Hard-coded Safety Rule)</strong>
+                  </label>
+                </div>
+
+                <div style={{ padding: "12px", background: "var(--bg-card)", borderRadius: "8px", border: "1px solid var(--border-main)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                    <strong>Double-Allocation Prevention</strong>
+                    <span className="badge badge-green">CONCURRENCY LOCK</span>
+                  </div>
+                  <p style={{ fontSize: "11px", color: "var(--text-muted)", margin: "0 0 10px 0" }}>
+                    Atomically locks resources during dispatch to reject double allocations with HTTP 409 Conflict.
+                  </p>
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "11px", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={systemConfig.double_allocation_lock}
+                      onChange={(e) => {
+                        const val = e.target.checked;
+                        setSystemConfig({ ...systemConfig, double_allocation_lock: val });
+                        void handleUpdateConfig({ double_allocation_lock: val });
+                      }}
+                    />
+                    <span>Atomic Resource Lock Active</span>
+                  </label>
+                </div>
+
+                <div style={{ padding: "12px", background: "var(--bg-card)", borderRadius: "8px", border: "1px solid var(--border-main)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                    <strong>Shelter Saturation Trigger</strong>
+                    <span className="badge badge-blue">{Math.round(systemConfig.shelter_saturation_threshold * 100)}% Capacity</span>
+                  </div>
+                  <p style={{ fontSize: "11px", color: "var(--text-muted)", margin: "0 0 10px 0" }}>
+                    Generates automatic diversion alerts to logistics when any shelter exceeds this capacity threshold.
+                  </p>
+                  <input
+                    type="range"
+                    min="50"
+                    max="95"
+                    step="5"
+                    value={Math.round(systemConfig.shelter_saturation_threshold * 100)}
+                    onChange={(e) => {
+                      const val = Number(e.target.value) / 100;
+                      setSystemConfig({ ...systemConfig, shelter_saturation_threshold: val });
+                    }}
+                    onMouseUp={() => void handleUpdateConfig({ shelter_saturation_threshold: systemConfig.shelter_saturation_threshold })}
+                    onTouchEnd={() => void handleUpdateConfig({ shelter_saturation_threshold: systemConfig.shelter_saturation_threshold })}
+                    style={{ width: "100%" }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Footer */}
       <footer className="footer">
         <div>
@@ -4175,6 +4723,8 @@ export default function App() {
           Autonomous Dispatch Disabled · Human Commander Authorization Mandatory
         </div>
       </footer>
-    </main>
+        </div>
+      </div>
+    </div>
   );
 }
