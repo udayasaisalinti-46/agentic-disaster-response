@@ -32,7 +32,7 @@ import {
   XCircle,
   Zap,
 } from "lucide-react";
-import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
+import { Circle, MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
 import L from "leaflet";
 import "./App.css";
 
@@ -552,6 +552,20 @@ export default function App() {
       });
 
       setSuccessMsg(`Agent 1 Intake Complete: Incident ${inc.incident_id} processed. ${inc.possible_duplicate ? "Potential duplicate flagged." : "Unique incident registered."}`);
+      
+      // Immediately reflect created incident on all GIS maps and state
+      setIncidents((prev) => {
+        const remaining = prev.filter((x) => x.incident_id !== inc.incident_id);
+        return [inc, ...remaining];
+      });
+      setSelectedIncidentId(inc.incident_id);
+      setPipelineIncident((prev) => ({
+        ...prev,
+        incident_id: inc.incident_id,
+        latitude: inc.latitude ?? prev.latitude,
+        longitude: inc.longitude ?? prev.longitude,
+      }));
+
       void refreshData();
 
       // Trigger auto-redirect countdown (4 seconds)
@@ -1805,14 +1819,124 @@ export default function App() {
                       </label>
                     </div>
 
+                    <div className="incident-form-grid">
+                      <label>
+                        Latitude (GPS)
+                        <input
+                          type="number"
+                          step="0.0001"
+                          value={pipelineIncident.latitude || 16.512}
+                          onChange={(e) => setPipelineIncident({ ...pipelineIncident, latitude: parseFloat(e.target.value) || 16.512 })}
+                        />
+                      </label>
+                      <label>
+                        Longitude (GPS)
+                        <input
+                          type="number"
+                          step="0.0001"
+                          value={pipelineIncident.longitude || 80.641}
+                          onChange={(e) => setPipelineIncident({ ...pipelineIncident, longitude: parseFloat(e.target.value) || 80.641 })}
+                        />
+                      </label>
+                    </div>
+
                     <button className="btn btn-primary" onClick={() => void handleIntakeAgentProcess()} disabled={loading}>
                       <Radio size={14} /> Process Intake & Check Duplicates
                     </button>
                   </div>
                 </div>
 
-                {/* Agent 1 Analysis & Duplicate Output */}
+                {/* Agent 1 Analysis & Live GIS Intake Map */}
                 <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                    <h3 style={{ fontSize: "13px", fontWeight: 800, margin: 0, display: "flex", alignItems: "center", gap: "6px" }}>
+                      <Compass size={15} style={{ color: "#2563eb" }} />
+                      Agent 1 Tactical GIS Intake & Duplicate Radar
+                    </h3>
+                    <span className="badge badge-blue" style={{ fontSize: "10px" }}>
+                      GPS: {(pipelineIncident.latitude || 16.512).toFixed(4)}, {(pipelineIncident.longitude || 80.641).toFixed(4)}
+                    </span>
+                  </div>
+
+                  <div className="map-wrap" style={{ height: "260px", marginBottom: "12px" }}>
+                    <MapContainer
+                      center={[pipelineIncident.latitude || 16.512, pipelineIncident.longitude || 80.641]}
+                      zoom={14}
+                      scrollWheelZoom={false}
+                      style={{ height: "100%", width: "100%" }}
+                    >
+                      <TileLayer
+                        attribution="&copy; OpenStreetMap contributors"
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      />
+
+                      {/* 500m Spatial Deduplication Buffer Perimeter */}
+                      <Circle
+                        center={[pipelineIncident.latitude || 16.512, pipelineIncident.longitude || 80.641]}
+                        radius={500}
+                        pathOptions={{
+                          color: intakeResult?.duplicate_detected ? "#d97706" : "#2563eb",
+                          fillColor: intakeResult?.duplicate_detected ? "#fef3c7" : "#dbeafe",
+                          fillOpacity: 0.25,
+                          dashArray: "4, 6",
+                        }}
+                      />
+
+                      {/* Active Ingested Incident Marker (Agent 1) */}
+                      <Marker
+                        position={[pipelineIncident.latitude || 16.512, pipelineIncident.longitude || 80.641]}
+                        icon={createPin("#dc2626", "INTAKE")}
+                      >
+                        <Popup>
+                          <span className="badge badge-red" style={{ fontSize: "9px" }}>AGENT 1: INGESTION TARGET</span>
+                          <strong style={{ display: "block", marginTop: "4px" }}>{pipelineIncident.incident_id}: {pipelineIncident.location}</strong>
+                          <p style={{ margin: "2px 0", fontSize: "11px" }}>{pipelineIncident.disaster_type} · {pipelineIncident.people_affected} affected</p>
+                          <small style={{ color: "#64748b" }}>Urgency: {pipelineIncident.urgency}/5</small>
+                        </Popup>
+                      </Marker>
+
+                      {/* Nearby Existing Incidents (for spatial overlap verification) */}
+                      {incidents.map((inc) => (
+                        <Marker
+                          key={inc.incident_id}
+                          position={[inc.latitude || 16.512, inc.longitude || 80.641]}
+                          icon={createPin(intakeResult?.duplicate_of === inc.incident_id ? "#f59e0b" : "#64748b", inc.incident_id.replace("INC-", ""))}
+                        >
+                          <Popup>
+                            <strong>{inc.incident_id}: {inc.location}</strong>
+                            <p>{inc.disaster_type} · {inc.people_affected} affected</p>
+                            {intakeResult?.duplicate_of === inc.incident_id && (
+                              <span className="badge badge-amber" style={{ display: "inline-block", marginTop: "4px" }}>
+                                ⚠️ Matched Duplicate Parent
+                              </span>
+                            )}
+                          </Popup>
+                        </Marker>
+                      ))}
+
+                      {/* Nearby Regional Shelters */}
+                      {shelters.map((s) => (
+                        <Marker
+                          key={s.shelter_id}
+                          position={[s.latitude || 16.515, s.longitude || 80.645]}
+                          icon={createPin("#2563eb", "SH")}
+                        >
+                          <Popup>
+                            <strong>{s.name}</strong>
+                            <p>Available: {s.total_capacity - s.occupied} beds</p>
+                          </Popup>
+                        </Marker>
+                      ))}
+                    </MapContainer>
+                  </div>
+
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", fontSize: "10px", color: "#64748b", marginBottom: "14px", background: "#f8fafc", padding: "6px 10px", borderRadius: "6px" }}>
+                    <span>🔴 <strong>Active Ingestion Target</strong></span>
+                    <span>🟡 <strong>500m Spatial Dedup Buffer</strong></span>
+                    <span>⚪ <strong>Existing Incidents</strong></span>
+                    <span>🔵 <strong>Shelters</strong></span>
+                  </div>
+
                   <h3 style={{ fontSize: "13px", fontWeight: 800, margin: "0 0 12px 0" }}>
                     Agent 1 Intelligence Output
                   </h3>
@@ -3151,6 +3275,20 @@ export default function App() {
                       </Popup>
                     </Marker>
                   ))}
+
+                  {/* Active Intake Report Marker on Dashboard Map */}
+                  {pipelineIncident && !incidents.some((x) => x.incident_id === pipelineIncident.incident_id) && (
+                    <Marker
+                      position={[pipelineIncident.latitude || 16.512, pipelineIncident.longitude || 80.641]}
+                      icon={createPin("#f59e0b", "INTAKE")}
+                    >
+                      <Popup>
+                        <span className="badge badge-amber" style={{ fontSize: "9px" }}>AGENT 1: INTAKE TARGET</span>
+                        <strong style={{ display: "block", marginTop: "4px" }}>{pipelineIncident.incident_id}: {pipelineIncident.location}</strong>
+                        <p style={{ margin: "2px 0", fontSize: "11px" }}>{pipelineIncident.disaster_type} · {pipelineIncident.people_affected} affected</p>
+                      </Popup>
+                    </Marker>
+                  )}
                   {shelters.map((s) => (
                     <Marker
                       key={s.shelter_id}
@@ -3291,6 +3429,21 @@ export default function App() {
                   </Popup>
                 </Marker>
               ))}
+
+              {/* Active Intake Report Marker on Tactical GIS Map */}
+              {pipelineIncident && !incidents.some((x) => x.incident_id === pipelineIncident.incident_id) && (
+                <Marker
+                  position={[pipelineIncident.latitude || 16.512, pipelineIncident.longitude || 80.641]}
+                  icon={createPin("#f59e0b", "INTAKE")}
+                >
+                  <Popup>
+                    <span className="badge badge-amber" style={{ fontSize: "9px" }}>AGENT 1: INTAKE TARGET</span>
+                    <strong style={{ display: "block", marginTop: "4px" }}>{pipelineIncident.incident_id}: {pipelineIncident.location}</strong>
+                    <p style={{ margin: "2px 0", fontSize: "11px" }}>{pipelineIncident.disaster_type} · {pipelineIncident.people_affected} affected</p>
+                    <small style={{ color: "#64748b" }}>Urgency: {pipelineIncident.urgency}/5 · Source: {pipelineIncident.source}</small>
+                  </Popup>
+                </Marker>
+              )}
 
               {shelters.map((s) => (
                 <Marker
