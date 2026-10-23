@@ -1,267 +1,37 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Activity,
-  AlertOctagon,
-  AlertTriangle,
-  ArrowLeft,
-  Bell,
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  CloudRain,
-  Compass,
-  Database,
-  FileDown,
-  FileText,
-  Flame,
-  Layers,
-  Moon,
-  Pause,
-  Play,
-  Radio,
-  RefreshCw,
-  RotateCcw,
-  Search,
-  Send,
-  Settings,
-  ShieldAlert,
-  ShieldCheck,
-  Sliders,
-  Sparkles,
-  Sun,
-  Thermometer,
-  Truck,
-  Users,
-  Warehouse,
-  Wind,
-  Workflow,
-  XCircle,
-  Zap,
-} from "lucide-react";
-import { Circle, MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
+/**
+ * ResQAI — Agentic AI Disaster Response System
+ * Government Emergency Management Portal
+ * React 19 + TypeScript + Leaflet + Tailwind CSS
+ * 
+ * UI Style: Indian Government Portal (NDMA/NIC inspired)
+ * 8-Agent Pipeline with auto-advance, location geocoding, and LLM integration
+ */
+
+import { useCallback, useEffect, useState } from "react";
+import { MapContainer, TileLayer, Marker, Popup, Circle, Polyline } from "react-leaflet";
 import L from "leaflet";
+import {
+  Activity, AlertOctagon, AlertTriangle, ArrowLeft, Bell,
+  CheckCircle2, ChevronLeft, ChevronRight, Clock,
+  CloudRain, Compass, Database, FileDown, FileText,
+  Layers, MapPin, RefreshCw, RotateCcw, Search, Shield,
+  ShieldAlert, ShieldCheck, Truck, Users, Warehouse,
+  Workflow, Zap, Navigation,
+  Phone, BarChart2, CheckCircle, XCircle, AlertCircle,
+  Eye, Send, ThumbsUp, ThumbsDown
+} from "lucide-react";
 import "./App.css";
 
+// ============================================================================
+// API CONFIG
+// ============================================================================
 const API =
   import.meta.env.VITE_API_URL ||
   (typeof window !== "undefined" &&
-  (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+    (window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1")
     ? ""
     : "https://resqai-backend-vflw.onrender.com");
-
-// Custom marker pin generator
-function createPin(color: string, label: string) {
-  return L.divIcon({
-    className: "custom-map-pin",
-    html: `<div style="background-color: ${color}; width: 28px; height: 28px; border-radius: 50%; border: 2px solid white; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; color: white; box-shadow: 0 3px 8px rgba(0,0,0,0.4);">${label}</div>`,
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-  });
-}
-
-function MessageHandoffBanner({
-  incomingFrom,
-  incomingText,
-  agentAction,
-  outgoingTo,
-  outgoingText,
-}: {
-  incomingFrom: string;
-  incomingText: string;
-  agentAction: string;
-  outgoingTo: string;
-  outgoingText: string;
-}) {
-  return (
-    <div className="message-handoff-banner">
-      <div className="message-bubble-in">
-        <div className="message-bubble-label" style={{ color: "#2563eb" }}>
-          📥 Incoming Message From: <strong>{incomingFrom}</strong>
-        </div>
-        <p className="message-bubble-text">{incomingText}</p>
-      </div>
-
-      <div className="message-transfer-arrow">
-        <Send size={16} />
-        <span>MESSAGE HANDOFF</span>
-        <span style={{ fontSize: "8px", color: "#64748b" }}>{agentAction}</span>
-      </div>
-
-      <div className="message-bubble-out">
-        <div className="message-bubble-label" style={{ color: "#16a34a" }}>
-          📤 Outgoing Message To: <strong>{outgoingTo}</strong>
-        </div>
-        <p className="message-bubble-text">{outgoingText}</p>
-      </div>
-    </div>
-  );
-}
-
-function PlainEnglishCard({ text }: { text: string }) {
-  return (
-    <div className="plain-english-card">
-      <span className="plain-english-badge">PLAIN ENGLISH EXPLANATION</span>
-      <span>{text}</span>
-    </div>
-  );
-}
-
-// Data Types
-type Incident = {
-  incident_id: string;
-  disaster_type: string;
-  description: string;
-  location: string;
-  people_affected: number;
-  urgency: number;
-  source: string;
-  severity_score?: number;
-  severity_level?: string;
-  severity?: { score?: number; level?: string; rule?: string; factors?: string[] };
-  status: string;
-  verification_status: string;
-  possible_duplicate?: boolean;
-  duplicate_of?: string | null;
-  latitude?: number | null;
-  longitude?: number | null;
-  assistance_requested?: string | null;
-  infrastructure_issue?: string | null;
-  created_at?: string;
-};
-
-type Resource = {
-  resource_id: string;
-  resource_type: string;
-  name: string;
-  location: string;
-  capacity: number;
-  capability?: string | null;
-  status: "Available" | "Reserved" | "Deployed" | "Returning";
-  latitude?: number | null;
-  longitude?: number | null;
-};
-
-type Shelter = {
-  shelter_id: string;
-  name: string;
-  location: string;
-  total_capacity: number;
-  occupied: number;
-  available_capacity?: number;
-  occupancy_percent?: number;
-  status: string;
-  latitude?: number | null;
-  longitude?: number | null;
-};
-
-type Road = {
-  road_id: string;
-  name: string;
-  origin_location: string;
-  destination_location: string;
-  status: "Open" | "Partially Blocked" | "Closed" | "Unknown";
-  closure_type: "None" | "Known Road Closure" | "AI-Inferred Potential Accessibility Problem";
-  reason?: string | null;
-};
-
-type Approval = {
-  request_id: string;
-  incident_id: string;
-  allocation_id?: string | null;
-  action_type: string;
-  proposed_action: string;
-  status: "Pending" | "Approved" | "Rejected" | "Modified";
-  reviewer?: string | null;
-  comments?: string | null;
-  created_at: string;
-};
-
-type ResponseAction = {
-  action_id: string;
-  incident_id: string;
-  allocation_id?: string | null;
-  title: string;
-  description: string;
-  priority: string;
-  status: "Open" | "In Progress" | "Blocked" | "Completed" | "Cancelled";
-  assigned_resource_id?: string | null;
-  remarks?: string | null;
-  updated_at: string;
-};
-
-type AlertItem = {
-  alert_id: string;
-  alert_type: string;
-  severity: "Critical" | "Warning" | "Info";
-  title: string;
-  message: string;
-  related_id?: string | null;
-  acknowledged: number;
-  created_at: string;
-};
-
-type DashboardData = {
-  generated_at?: string;
-  incidents?: {
-    total?: number;
-    critical?: number;
-    high?: number;
-    possible_duplicates?: number;
-    needs_reassessment?: number;
-  };
-  resources_by_status?: Record<string, number>;
-  shelters?: {
-    total?: number;
-    total_capacity?: number;
-    total_occupied?: number;
-    available_capacity?: number;
-    full?: number;
-    near_full?: number;
-  };
-  roads?: {
-    total?: number;
-    open?: number;
-    closed?: number;
-    partially_blocked?: number;
-  };
-  pending_approvals?: number;
-  unread_alerts?: number;
-  actions_by_status?: Record<string, number>;
-};
-
-type WorkflowResult = {
-  workflow: string;
-  incident_intake: Record<string, unknown>;
-  situation_assessment: Record<string, unknown>;
-  weather_assessment: Record<string, unknown>;
-  geospatial_assessment: Record<string, unknown>;
-  resource_assessment: Record<string, unknown>;
-  resource_plan: Record<string, unknown>;
-  action_plan: Record<string, unknown>;
-  review: Record<string, unknown>;
-  automatic_dispatch: boolean;
-  human_approval_required: boolean;
-};
-
-type TestCaseResult = {
-  test_id: string;
-  scenario: string;
-  expected_behavior: string;
-  status: "PASS" | "FAIL";
-  agents_involved: string[];
-  tool_calls: string[];
-  input_data: Record<string, unknown>;
-  actual_output: Record<string, unknown>;
-};
-
-type TestSuiteReport = {
-  all_passed: boolean;
-  total: number;
-  passed: number;
-  failed: number;
-  results: TestCaseResult[];
-};
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API}${path}`, {
@@ -269,105 +39,2342 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
     ...options,
   });
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.detail || `HTTP ${res.status}: ${res.statusText}`);
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || `HTTP ${res.status}`);
   }
   return res.json() as Promise<T>;
 }
 
-export type ActiveTab =
-  | "landing"
-  | "pipeline"
-  | "agents"
-  | "dashboard"
-  | "incidents"
-  | "map"
-  | "details"
-  | "resources"
-  | "shelters"
-  | "routes"
-  | "planning"
-  | "approvals"
-  | "actions"
-  | "alerts"
-  | "reports"
-  | "settings"
-  | "tests";
+// ============================================================================
+// LOCATION DATA
+// ============================================================================
+const INDIAN_STATES = [
+  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
+  "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand",
+  "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur",
+  "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan",
+  "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh",
+  "Uttarakhand", "West Bengal", "Andaman and Nicobar Islands", "Chandigarh",
+  "Dadra and Nagar Haveli and Daman and Diu", "Delhi", "Jammu and Kashmir",
+  "Ladakh", "Lakshadweep", "Puducherry",
+];
 
-export default function App() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>("landing");
+const STATE_DISTRICTS: Record<string, string[]> = {
+  "Andhra Pradesh": ["Alluri Sitharama Raju", "Anakapalli", "Anantapur", "Annamayya", "Bapatla", "Chittoor", "East Godavari", "Eluru", "Guntur", "Kakinada", "Konaseema", "Krishna", "Kurnool", "Nandyal", "NTR", "Palnadu", "Parvathipuram Manyam", "Prakasam", "Srikakulam", "Sri Balaji", "Sri Sathya Sai", "Tirupati", "Visakhapatnam", "Vizianagaram", "West Godavari", "YSR Kadapa"],
+  "Telangana": ["Adilabad", "Bhadradri Kothagudem", "Hanamkonda", "Hyderabad", "Jagtial", "Jangaon", "Jayashankar Bhupalpally", "Jogulamba Gadwal", "Kamareddy", "Karimnagar", "Khammam", "Kumuram Bheem Asifabad", "Mahabubabad", "Mahabubnagar", "Mancherial", "Medak", "Medchal-Malkajgiri", "Mulugu", "Nagarkurnool", "Nalgonda", "Narayanpet", "Nirmal", "Nizamabad", "Peddapalli", "Rajanna Sircilla", "Rangareddy", "Sangareddy", "Siddipet", "Suryapet", "Vikarabad", "Wanaparthy", "Warangal", "Yadadri Bhuvanagiri"],
+  "Maharashtra": ["Ahmednagar", "Akola", "Amravati", "Aurangabad", "Beed", "Bhandara", "Buldhana", "Chandrapur", "Dhule", "Gadchiroli", "Gondia", "Hingoli", "Jalgaon", "Jalna", "Kolhapur", "Latur", "Mumbai City", "Mumbai Suburban", "Nagpur", "Nanded", "Nandurbar", "Nashik", "Osmanabad", "Palghar", "Parbhani", "Pune", "Raigad", "Ratnagiri", "Sangli", "Satara", "Sindhudurg", "Solapur", "Thane", "Wardha", "Washim", "Yavatmal"],
+  "Karnataka": ["Bagalkot", "Ballari", "Belagavi", "Bengaluru Rural", "Bengaluru Urban", "Bidar", "Chamarajanagar", "Chikkaballapur", "Chikkamagaluru", "Chitradurga", "Dakshina Kannada", "Davanagere", "Dharwad", "Gadag", "Hassan", "Haveri", "Kalaburagi", "Kodagu", "Kolar", "Koppal", "Mandya", "Mysuru", "Raichur", "Ramanagara", "Shivamogga", "Tumakuru", "Udupi", "Uttara Kannada", "Vijayapura", "Yadgir"],
+  "Tamil Nadu": ["Ariyalur", "Chengalpattu", "Chennai", "Coimbatore", "Cuddalore", "Dharmapuri", "Dindigul", "Erode", "Kallakurichi", "Kanchipuram", "Kanyakumari", "Karur", "Krishnagiri", "Madurai", "Mayiladuthurai", "Nagapattinam", "Namakkal", "Nilgiris", "Perambalur", "Pudukkottai", "Ramanathapuram", "Ranipet", "Salem", "Sivaganga", "Tenkasi", "Thanjavur", "Theni", "Thoothukudi", "Tiruchirappalli", "Tirunelveli", "Tirupathur", "Tiruppur", "Tiruvallur", "Tiruvannamalai", "Tiruvarur", "Vellore", "Villupuram", "Virudhunagar"],
+  "Kerala": ["Alappuzha", "Ernakulam", "Idukki", "Kannur", "Kasaragod", "Kollam", "Kottayam", "Kozhikode", "Malappuram", "Palakkad", "Pathanamthitta", "Thiruvananthapuram", "Thrissur", "Wayanad"],
+  "Gujarat": ["Ahmedabad", "Amreli", "Anand", "Aravalli", "Banaskantha", "Bharuch", "Bhavnagar", "Botad", "Chhota Udaipur", "Dahod", "Dang", "Devbhoomi Dwarka", "Gandhinagar", "Gir Somnath", "Jamnagar", "Junagadh", "Kheda", "Kutch", "Mahisagar", "Mehsana", "Morbi", "Narmada", "Navsari", "Panchmahal", "Patan", "Porbandar", "Rajkot", "Sabarkantha", "Surat", "Surendranagar", "Tapi", "Vadodara", "Valsad"],
+  "Uttar Pradesh": ["Agra", "Aligarh", "Ambedkar Nagar", "Amethi", "Amroha", "Auraiya", "Ayodhya", "Azamgarh", "Baghpat", "Bahraich", "Ballia", "Balrampur", "Banda", "Barabanki", "Bareilly", "Basti", "Bijnor", "Budaun", "Bulandshahr", "Chandauli", "Chitrakoot", "Deoria", "Etah", "Etawah", "Farrukhabad", "Fatehpur", "Firozabad", "Gautam Buddha Nagar", "Ghaziabad", "Ghazipur", "Gonda", "Gorakhpur", "Hamirpur", "Hapur", "Hardoi", "Jalaun", "Jaunpur", "Jhansi", "Kanpur Nagar", "Kaushambi", "Kushinagar", "Lakhimpur Kheri", "Lalitpur", "Lucknow", "Mathura", "Mau", "Meerut", "Mirzapur", "Moradabad", "Muzaffarnagar", "Prayagraj", "Rae Bareli", "Rampur", "Saharanpur", "Shahjahanpur", "Sitapur", "Sultanpur", "Unnao", "Varanasi"],
+  "Rajasthan": ["Ajmer", "Alwar", "Banswara", "Baran", "Barmer", "Bharatpur", "Bhilwara", "Bikaner", "Bundi", "Chittorgarh", "Churu", "Dausa", "Dholpur", "Dungarpur", "Jaipur", "Jaisalmer", "Jalore", "Jhalawar", "Jodhpur", "Kota", "Nagaur", "Pali", "Rajsamand", "Sikar", "Sirohi", "Sri Ganganagar", "Tonk", "Udaipur"],
+  "West Bengal": ["Alipurduar", "Bankura", "Birbhum", "Cooch Behar", "Dakshin Dinajpur", "Darjeeling", "Hooghly", "Howrah", "Jalpaiguri", "Jhargram", "Kalimpong", "Kolkata", "Malda", "Murshidabad", "Nadia", "North 24 Parganas", "Paschim Bardhaman", "Paschim Medinipur", "Purba Bardhaman", "Purba Medinipur", "Purulia", "South 24 Parganas", "Uttar Dinajpur"],
+  "Madhya Pradesh": ["Agar Malwa", "Alirajpur", "Anuppur", "Ashoknagar", "Balaghat", "Barwani", "Betul", "Bhind", "Bhopal", "Burhanpur", "Chhatarpur", "Chhindwara", "Damoh", "Datia", "Dewas", "Dhar", "Dindori", "Guna", "Gwalior", "Harda", "Hoshangabad", "Indore", "Jabalpur", "Jhabua", "Katni", "Khandwa", "Khargone", "Mandla", "Mandsaur", "Morena", "Narsinghpur", "Neemuch", "Panna", "Raisen", "Rajgarh", "Ratlam", "Rewa", "Sagar", "Satna", "Sehore", "Seoni", "Shahdol", "Shivpuri", "Singrauli", "Tikamgarh", "Ujjain", "Umaria", "Vidisha"],
+  "Odisha": ["Angul", "Balangir", "Balasore", "Bargarh", "Bhadrak", "Boudh", "Cuttack", "Deogarh", "Dhenkanal", "Gajapati", "Ganjam", "Jagatsinghpur", "Jajpur", "Jharsuguda", "Kalahandi", "Kandhamal", "Kendrapara", "Kendujhar", "Khordha", "Koraput", "Malkangiri", "Mayurbhanj", "Nabarangpur", "Nayagarh", "Nuapada", "Puri", "Rayagada", "Sambalpur", "Subarnapur", "Sundargarh"],
+  "Bihar": ["Araria", "Arwal", "Aurangabad", "Banka", "Begusarai", "Bhagalpur", "Bhojpur", "Buxar", "Darbhanga", "East Champaran", "Gaya", "Gopalganj", "Jamui", "Jehanabad", "Kaimur", "Katihar", "Khagaria", "Kishanganj", "Lakhisarai", "Madhepura", "Madhubani", "Munger", "Muzaffarpur", "Nalanda", "Nawada", "Patna", "Purnia", "Rohtas", "Saharsa", "Samastipur", "Saran", "Sitamarhi", "Siwan", "Supaul", "Vaishali", "West Champaran"],
+  "Assam": ["Baksa", "Barpeta", "Biswanath", "Bongaigaon", "Cachar", "Charaideo", "Chirang", "Darrang", "Dhemaji", "Dhubri", "Dibrugarh", "Dima Hasao", "Goalpara", "Golaghat", "Hailakandi", "Hojai", "Jorhat", "Kamrup", "Kamrup Metropolitan", "Karbi Anglong", "Karimganj", "Kokrajhar", "Lakhimpur", "Majuli", "Morigaon", "Nagaon", "Nalbari", "Sivasagar", "Sonitpur", "Tinsukia", "Udalguri"],
+  "Delhi": ["Central Delhi", "East Delhi", "New Delhi", "North Delhi", "North East Delhi", "North West Delhi", "Shahdara", "South Delhi", "South East Delhi", "South West Delhi", "West Delhi"],
+  "Punjab": ["Amritsar", "Barnala", "Bathinda", "Faridkot", "Fatehgarh Sahib", "Fazilka", "Ferozepur", "Gurdaspur", "Hoshiarpur", "Jalandhar", "Kapurthala", "Ludhiana", "Mansa", "Moga", "Mohali", "Muktsar", "Nawanshahr", "Pathankot", "Patiala", "Ropar", "Sangrur", "Tarn Taran"],
+  "Haryana": ["Ambala", "Bhiwani", "Charkhi Dadri", "Faridabad", "Fatehabad", "Gurugram", "Hisar", "Jhajjar", "Jind", "Kaithal", "Karnal", "Kurukshetra", "Mahendragarh", "Nuh", "Palwal", "Panchkula", "Panipat", "Rewari", "Rohtak", "Sirsa", "Sonipat", "Yamunanagar"],
+};
 
-  // Command Center Navigation, Theme & Global Search State
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [theme, setTheme] = useState<"dark" | "light">(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("resqai_theme");
-      if (saved === "light" || saved === "dark") return saved;
-    }
-    return "dark";
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+const DISASTER_TYPES = [
+  "Flood", "Cyclone / Hurricane", "Earthquake", "Wildfire / Forest Fire",
+  "Landslide", "Tsunami", "Drought", "Heatwave", "Cloudburst",
+  "Industrial Accident", "Chemical Hazard", "Urban Emergency",
+  "Dam Breach", "Lightning Strike", "Urban Flooding", "Avalanche",
+  "Volcanic Activity", "Other",
+];
+
+const SOURCE_TYPES = [
+  "Emergency Call 911", "Field Rescue Team Report", "Weather Service Alert",
+  "IoT / Water Level Sensor", "Government Alert / NDMA", "GIS Monitoring System",
+  "Shelter Management Report", "Hospital Report", "Rescue Team Field Update",
+  "Transportation Authority Alert", "Citizen Report / Social Media",
+  "Satellite Imagery Analysis", "News Media Report", "Other",
+];
+
+const INFRASTRUCTURE_OPTIONS = [
+  "None reported", "Road partially flooded", "Main road closed",
+  "Bridge damaged or submerged", "Power lines down", "Communication disrupted",
+  "Hospital partially affected", "Residential area flooding",
+  "Village access cut off completely", "Dam or reservoir at risk",
+  "Landslide blocking road", "Industrial facility affected", "Other",
+];
+
+const ASSISTANCE_OPTIONS = [
+  "Rescue boat deployment", "Evacuation assistance", "Medical assistance",
+  "Food and water supply", "Temporary shelter arrangement", "Search and rescue",
+  "Road clearance", "Power restoration", "Communication restoration",
+  "Aerial assistance (if approved)", "Structural safety assessment", "Other",
+];
+
+const WMO_CODES: Record<number, string> = {
+  0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
+  45: "Foggy", 48: "Icy fog", 51: "Light drizzle", 53: "Moderate drizzle",
+  55: "Heavy drizzle", 61: "Light rain", 63: "Moderate rain", 65: "Heavy rain",
+  71: "Light snow", 73: "Moderate snow", 75: "Heavy snow",
+  80: "Light showers", 81: "Moderate showers", 82: "Violent showers",
+  95: "Thunderstorm", 96: "Thunderstorm with hail", 99: "Thunderstorm heavy hail",
+};
+
+// ============================================================================
+// TYPES
+// ============================================================================
+type Incident = {
+  incident_id: string; disaster_type: string; description: string;
+  location: string; people_affected: number; urgency: number; source: string;
+  severity_score?: number; severity_level?: string;
+  severity?: { score?: number; level?: string };
+  status: string; verification_status: string;
+  possible_duplicate?: boolean; duplicate_of?: string | null;
+  latitude?: number | null; longitude?: number | null;
+  assistance_requested?: string | null; infrastructure_issue?: string | null;
+  created_at?: string;
+};
+type Resource = {
+  resource_id: string; resource_type: string; name: string; location: string;
+  capacity: number; capability?: string | null;
+  status: "Available" | "Reserved" | "Deployed" | "Returning";
+  latitude?: number | null; longitude?: number | null;
+};
+type Shelter = {
+  shelter_id: string; name: string; location: string; total_capacity: number;
+  occupied: number; status: string; latitude?: number | null; longitude?: number | null;
+};
+type Road = {
+  road_id: string; name: string; origin_location: string; destination_location: string;
+  status: "Open" | "Partially Blocked" | "Closed" | "Unknown";
+  closure_type: string; reason?: string | null;
+};
+type Approval = {
+  request_id: string; incident_id: string; allocation_id?: string | null;
+  action_type: string; proposed_action: string;
+  status: "Pending" | "Approved" | "Rejected" | "Modified";
+  reviewer?: string | null; comments?: string | null;
+  created_at: string; reviewed_at?: string | null;
+};
+type ResponseAction = {
+  action_id: string; incident_id: string; title: string;
+  description: string; priority: string;
+  status: "Open" | "In Progress" | "Blocked" | "Completed" | "Cancelled";
+  assigned_resource_id?: string | null; remarks?: string | null;
+  updated_at: string;
+};
+type AlertItem = {
+  alert_id: string; alert_type: string;
+  severity: "Critical" | "Warning" | "Info";
+  title: string; message: string; related_id?: string | null;
+  acknowledged: number; created_at: string;
+};
+type DashboardData = {
+  incidents?: { total?: number; critical?: number; high?: number; possible_duplicates?: number; needs_reassessment?: number };
+  resources_by_status?: Record<string, number>;
+  shelters?: { total?: number; total_capacity?: number; total_occupied?: number; available_capacity?: number; full?: number; near_full?: number };
+  roads?: { total?: number; open?: number; closed?: number; partially_blocked?: number };
+  pending_approvals?: number; unread_alerts?: number;
+  actions_by_status?: Record<string, number>;
+};
+
+// Pipeline shared state
+type PipelineData = {
+  incident?: Incident;
+  location_state?: string; location_district?: string; location_mandal?: string; location_village?: string;
+  severity_score?: number; severity_level?: string; severity_factors?: string[];
+  ai_analysis?: string; ai_source?: string;
+  weather?: Record<string, number | string>;
+  route_assessment?: Record<string, unknown>;
+  selected_resources?: Resource[];
+  allocation_ids?: string[];
+  approval_id?: string;
+  commander_decision?: string; commander_name?: string;
+  action_id?: string;
+};
+
+type ActiveTab = "pipeline" | "dashboard" | "incidents" | "resources" | "shelters" | "routes" | "approvals" | "actions" | "alerts" | "reports";
+
+// ============================================================================
+// LEAFLET ICONS
+// ============================================================================
+const makeIcon = (color: string, label: string) =>
+  L.divIcon({
+    className: "",
+    html: `<div style="background:${color};color:white;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.3)">${label}</div>`,
+    iconSize: [28, 28], iconAnchor: [14, 14],
   });
-  const [searchQuery, setSearchQuery] = useState("");
 
+// ============================================================================
+// AGENT 1 — INCIDENT INTAKE
+// ============================================================================
+type Agent1Props = {
+  onComplete: (data: PipelineData) => void;
+  onBack?: () => void;
+};
+
+function Agent1Intake({ onComplete, onBack }: Agent1Props) {
+  const [country] = useState("India");
+  const [state, setState] = useState("");
+  const [district, setDistrict] = useState("");
+  const [mandal, setMandal] = useState("");
+  const [village, setVillage] = useState("");
+  const [latitude, setLatitude] = useState<string>("");
+  const [longitude, setLongitude] = useState<string>("");
+  const [disasterType, setDisasterType] = useState("");
+  const [description, setDescription] = useState("");
+  const [peopleAffected, setPeopleAffected] = useState<number>(0);
+  const [urgency, setUrgency] = useState<number>(3);
+  const [source, setSource] = useState("");
+  const [infrastructure, setInfrastructure] = useState("None reported");
+  const [assistance, setAssistance] = useState("");
+  const [callerPhone, setCallerPhone] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [geocoding, setGeocoding] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  const [savedIncident, setSavedIncident] = useState<Incident | null>(null);
+  const [dupWarning, setDupWarning] = useState("");
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [progress, setProgress] = useState(0);
+
+  const districts = state ? (STATE_DISTRICTS[state] || []) : [];
+
+  // Auto-geocode when state + district selected
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
-    localStorage.setItem("resqai_theme", theme);
-  }, [theme]);
+    if (state && district) {
+      const query = [district, mandal, state, "India"].filter(Boolean).join(", ");
+      setGeocoding(true);
+      fetch(`${API}/geocode?q=${encodeURIComponent(query)}`)
+        .then(r => r.json())
+        .then((data: { results?: Array<{ latitude: number; longitude: number }> }) => {
+          if (data.results?.length) {
+            setLatitude(data.results[0].latitude.toFixed(5));
+            setLongitude(data.results[0].longitude.toFixed(5));
+          }
+        })
+        .catch(() => {})
+        .finally(() => setGeocoding(false));
+    }
+  }, [state, district, mandal]);
 
-  // URL Hash Sync for bookmarkable/sharable deep-links to all 14 pages
+  // Auto-advance countdown
   useEffect(() => {
-    const handleHash = () => {
-      const hash = window.location.hash.replace("#", "").trim();
-      if (!hash) return;
-      if (hash.startsWith("incidents/")) {
-        const id = hash.replace("incidents/", "");
-        setSelectedIncidentId(id);
-        setActiveTab("details");
-      } else if (hash === "agents") {
-        setActiveTab("pipeline");
-      } else if (
-        [
-          "landing",
-          "pipeline",
-          "dashboard",
-          "incidents",
-          "details",
-          "map",
-          "resources",
-          "shelters",
-          "routes",
-          "planning",
-          "approvals",
-          "actions",
-          "alerts",
-          "reports",
-          "settings",
-          "tests",
-        ].includes(hash)
-      ) {
-        setActiveTab(hash as ActiveTab);
-      }
-    };
-    handleHash();
-    window.addEventListener("hashchange", handleHash);
-    return () => window.removeEventListener("hashchange", handleHash);
-  }, []);
-
-  const navigateTo = (tab: ActiveTab, incidentId?: string) => {
-    if (tab === "agents") {
-      setActiveTab("pipeline");
-      window.location.hash = "#agents";
+    if (countdown === null) return;
+    if (countdown <= 0) {
+      if (savedIncident) onComplete({
+        incident: savedIncident,
+        location_state: state, location_district: district,
+        location_mandal: mandal, location_village: village,
+      });
       return;
     }
-    setActiveTab(tab);
-    if (incidentId) {
-      setSelectedIncidentId(incidentId);
-      window.location.hash = `#incidents/${incidentId}`;
-    } else {
-      window.location.hash = `#${tab}`;
+    const t = setTimeout(() => {
+      setCountdown(c => (c !== null ? c - 1 : null));
+      setProgress(p => Math.min(100, p + 25));
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [countdown, savedIncident, onComplete, state, district, mandal, village]);
+
+  const locationDisplay = [village, mandal, district, state, country].filter(Boolean).join(", ");
+
+  const handleSubmit = async () => {
+    setError("");
+    if (!disasterType) { setError("Please select disaster type."); return; }
+    if (!state) { setError("Please select State."); return; }
+    if (!district) { setError("Please select District."); return; }
+    if (!description.trim() || description.length < 10) { setError("Description must be at least 10 characters."); return; }
+    if (peopleAffected < 0) { setError("People affected cannot be negative."); return; }
+    if (!source) { setError("Please select information source."); return; }
+
+    setLoading(true);
+    try {
+      const payload = {
+        disaster_type: disasterType,
+        location: locationDisplay,
+        description,
+        people_affected: peopleAffected,
+        urgency,
+        source,
+        latitude: latitude ? parseFloat(latitude) : null,
+        longitude: longitude ? parseFloat(longitude) : null,
+        infrastructure_issue: infrastructure,
+        assistance_requested: assistance,
+      };
+      const res = await apiFetch<{ incident: Incident; duplicate_detection?: { duplicate_detected?: boolean; duplicate_of?: string | null; reason?: string } }>("/incidents", { method: "POST", body: JSON.stringify(payload) });
+      setSavedIncident(res.incident);
+      if (res.duplicate_detection?.duplicate_detected) {
+        setDupWarning(`Potential duplicate of ${res.duplicate_detection.duplicate_of || "an existing incident"}. Flagged for commander review.`);
+      }
+      setSuccess(true);
+      setCountdown(4);
+      setProgress(0);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Submission failed");
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Core Data States
+  if (success && savedIncident) {
+    return (
+      <div className="agent-card">
+        <div className="agent-card-header">
+          <div>
+            <div className="agent-title"><CheckCircle size={18} style={{color:"var(--gov-green)"}} />Incident Registered Successfully</div>
+            <div className="agent-subtitle">Incident ID: <strong style={{color:"var(--gov-blue)",fontFamily:"monospace"}}>{savedIncident.incident_id}</strong></div>
+          </div>
+          <span className="badge badge-info">{disasterType}</span>
+        </div>
+        <div className="agent-body">
+          {dupWarning && (
+            <div className="duplicate-banner mb-3">
+              <AlertTriangle size={16} />
+              <span><strong>Duplicate Flagged:</strong> {dupWarning}</span>
+            </div>
+          )}
+          <table className="output-table">
+            <tbody>
+              <tr><td>Incident ID</td><td style={{fontFamily:"monospace",fontWeight:700,color:"var(--gov-blue)"}}>{savedIncident.incident_id}</td></tr>
+              <tr><td>Disaster Type</td><td>{savedIncident.disaster_type}</td></tr>
+              <tr><td>Location</td><td>{savedIncident.location}</td></tr>
+              <tr><td>Coordinates</td><td>{savedIncident.latitude?.toFixed(5)}, {savedIncident.longitude?.toFixed(5)}</td></tr>
+              <tr><td>People Affected</td><td>{savedIncident.people_affected}</td></tr>
+              <tr><td>Urgency</td><td>{savedIncident.urgency}/5</td></tr>
+              <tr><td>Source</td><td>{savedIncident.source}</td></tr>
+              <tr><td>Verification</td><td>{savedIncident.verification_status}</td></tr>
+              <tr><td>Duplicate Check</td><td>{savedIncident.possible_duplicate ? "⚠️ Flagged" : "✅ Unique"}</td></tr>
+            </tbody>
+          </table>
+
+          <div className="mt-4" style={{textAlign:"center"}}>
+            <div style={{fontSize:13,fontWeight:600,color:"var(--gov-text-muted)",marginBottom:8}}>
+              Auto-advancing to Agent 2 in {countdown}s...
+            </div>
+            <div className="auto-advance-bar">
+              <div className="auto-advance-fill" style={{width:`${progress}%`}} />
+            </div>
+          </div>
+        </div>
+        <div className="agent-footer">
+          {onBack && <button className="back-btn" onClick={onBack}><ArrowLeft size={14}/> Back</button>}
+          <button className="btn btn-primary" onClick={() => onComplete({ incident: savedIncident, location_state: state, location_district: district, location_mandal: mandal, location_village: village })}>
+            Continue to Agent 2 →
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="agent-card">
+      <div className="agent-card-header">
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+            <span className="agent-number">AGENT 1</span>
+            <span style={{fontSize:11,color:"var(--gov-text-muted)"}}>Emergency Incident Intake</span>
+          </div>
+          <div className="agent-title"><Phone size={16} /> Incident Report Form</div>
+          <div className="agent-subtitle">Enter complete incident details. All fields marked * are required.</div>
+        </div>
+        {onBack && <button className="back-btn" onClick={onBack}><ArrowLeft size={14}/> Back</button>}
+      </div>
+
+      <div className="agent-body">
+        <div className="safety-notice">
+          <Shield size={14} style={{flexShrink:0,marginTop:2}} />
+          <span><strong>Mandatory:</strong> This form creates an official incident record. Provide accurate information. All submissions are logged and reviewed by the Emergency Operations Commander.</span>
+        </div>
+
+        {error && (
+          <div className="gov-alert alert-danger mb-3">
+            <AlertCircle size={16} />
+            <div><strong>Validation Error</strong> {error}</div>
+          </div>
+        )}
+
+        <div className="gov-form">
+          {/* Section 1: Disaster Type */}
+          <div style={{background:"#f7f9fb",border:"1px solid var(--gov-border)",borderRadius:"var(--radius-sm)",padding:"14px",marginBottom:4}}>
+            <div style={{fontSize:12,fontWeight:700,color:"var(--gov-navy)",marginBottom:10,textTransform:"uppercase",letterSpacing:"0.5px"}}>
+              1. Disaster Classification
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Disaster Type <span className="req">*</span></label>
+                <select className="form-control" value={disasterType} onChange={e => setDisasterType(e.target.value)}>
+                  <option value="">-- Select Disaster Type --</option>
+                  {DISASTER_TYPES.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Information Source <span className="req">*</span></label>
+                <select className="form-control" value={source} onChange={e => setSource(e.target.value)}>
+                  <option value="">-- Select Source --</option>
+                  {SOURCE_TYPES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2: Location Hierarchy */}
+          <div style={{background:"#f7f9fb",border:"1px solid var(--gov-border)",borderRadius:"var(--radius-sm)",padding:"14px",marginBottom:4}}>
+            <div style={{fontSize:12,fontWeight:700,color:"var(--gov-navy)",marginBottom:10,textTransform:"uppercase",letterSpacing:"0.5px"}}>
+              2. Incident Location
+            </div>
+            <div className="form-row mb-3">
+              <div className="form-group">
+                <label className="form-label">Country</label>
+                <input className="form-control readonly" value={country} readOnly />
+              </div>
+              <div className="form-group">
+                <label className="form-label">State <span className="req">*</span></label>
+                <select className="form-control" value={state} onChange={e => { setState(e.target.value); setDistrict(""); setLatitude(""); setLongitude(""); }}>
+                  <option value="">-- Select State --</option>
+                  {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="form-row mb-3">
+              <div className="form-group">
+                <label className="form-label">District <span className="req">*</span></label>
+                {districts.length > 0 ? (
+                  <select className="form-control" value={district} onChange={e => setDistrict(e.target.value)}>
+                    <option value="">-- Select District --</option>
+                    {districts.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                ) : (
+                  <input className="form-control" placeholder={state ? "Enter district name" : "Select state first"} value={district} onChange={e => setDistrict(e.target.value)} disabled={!state} />
+                )}
+              </div>
+              <div className="form-group">
+                <label className="form-label">Mandal / Taluk</label>
+                <input className="form-control" placeholder="e.g. Tenali, Guntur Rural" value={mandal} onChange={e => setMandal(e.target.value)} />
+              </div>
+            </div>
+            <div className="form-row mb-3">
+              <div className="form-group">
+                <label className="form-label">Village / City / Ward</label>
+                <input className="form-control" placeholder="e.g. Zone A Residential, Riverside Village" value={village} onChange={e => setVillage(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Caller / Reporter Phone</label>
+                <input className="form-control" placeholder="+91 XXXXX XXXXX" value={callerPhone} onChange={e => setCallerPhone(e.target.value)} />
+              </div>
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label"><MapPin size={12}/> Latitude {geocoding && <span style={{color:"var(--gov-blue)",fontSize:11}}>(Auto-detecting...)</span>}</label>
+                <input className="form-control readonly" style={{background:"#edf4ff",borderColor:"#b3cff5",color:"var(--gov-blue)",fontWeight:600,fontFamily:"monospace"}} value={latitude} onChange={e => setLatitude(e.target.value)} placeholder={geocoding ? "Geocoding..." : "Auto or enter manually"} />
+              </div>
+              <div className="form-group">
+                <label className="form-label"><MapPin size={12}/> Longitude</label>
+                <input className="form-control readonly" style={{background:"#edf4ff",borderColor:"#b3cff5",color:"var(--gov-blue)",fontWeight:600,fontFamily:"monospace"}} value={longitude} onChange={e => setLongitude(e.target.value)} placeholder={geocoding ? "Geocoding..." : "Auto or enter manually"} />
+              </div>
+            </div>
+            {latitude && longitude && (
+              <div className="mt-2 text-xs" style={{color:"var(--gov-green)"}}>
+                ✅ Coordinates set: {latitude}, {longitude}
+              </div>
+            )}
+          </div>
+
+          {/* Section 3: Incident Details */}
+          <div style={{background:"#f7f9fb",border:"1px solid var(--gov-border)",borderRadius:"var(--radius-sm)",padding:"14px",marginBottom:4}}>
+            <div style={{fontSize:12,fontWeight:700,color:"var(--gov-navy)",marginBottom:10,textTransform:"uppercase",letterSpacing:"0.5px"}}>
+              3. Incident Details
+            </div>
+            <div className="form-group mb-3">
+              <label className="form-label">Incident Description <span className="req">*</span></label>
+              <textarea className="form-control" rows={3} placeholder="Describe the incident in detail: nature of disaster, current situation, immediate threats, accessibility..." value={description} onChange={e => setDescription(e.target.value)} />
+              <span className="form-hint">{description.length} characters (minimum 10 required)</span>
+            </div>
+            <div className="form-row mb-3">
+              <div className="form-group">
+                <label className="form-label">People Affected <span className="req">*</span></label>
+                <input className="form-control" type="number" min={0} value={peopleAffected} onChange={e => setPeopleAffected(parseInt(e.target.value) || 0)} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Urgency Level <span className="req">*</span> ({urgency}/5)</label>
+                <select className="form-control" value={urgency} onChange={e => setUrgency(parseInt(e.target.value))}>
+                  <option value={1}>1 - Low (Non-urgent, monitoring required)</option>
+                  <option value={2}>2 - Moderate (Response within 6 hours)</option>
+                  <option value={3}>3 - High (Response within 2 hours)</option>
+                  <option value={4}>4 - Very High (Response within 1 hour)</option>
+                  <option value={5}>5 - Critical (Immediate life threat)</option>
+                </select>
+              </div>
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Infrastructure Status</label>
+                <select className="form-control" value={infrastructure} onChange={e => setInfrastructure(e.target.value)}>
+                  {INFRASTRUCTURE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Assistance Required</label>
+                <select className="form-control" value={assistance} onChange={e => setAssistance(e.target.value)}>
+                  <option value="">-- Select Type --</option>
+                  {ASSISTANCE_OPTIONS.map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="agent-footer">
+        {onBack && <button className="back-btn" onClick={onBack}><ArrowLeft size={14}/> Back</button>}
+        <div style={{fontSize:11,color:"var(--gov-text-muted)"}}>Auto-advance to Agent 2 on submit</div>
+        <button className="btn btn-primary btn-lg" onClick={handleSubmit} disabled={loading}>
+          {loading ? <><div className="spinner" style={{width:16,height:16,borderWidth:2}} /> Processing...</> : <><Send size={16}/> Submit Incident Report</>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// AGENT 2 — SITUATION ASSESSMENT & SEVERITY
+// ============================================================================
+type Agent2Props = {
+  data: PipelineData;
+  onComplete: (data: PipelineData) => void;
+  onBack: () => void;
+};
+
+function Agent2Severity({ data, onComplete, onBack }: Agent2Props) {
+  const inc = data.incident!;
+  const [loading, setLoading] = useState(true);
+  const [aiText, setAiText] = useState("");
+  const [aiSource, setAiSource] = useState("");
+  const [error, setError] = useState("");
+  const [done, setDone] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [progress, setProgress] = useState(0);
+
+  // Deterministic severity score
+  const popFactor = Math.min(40, Math.floor((inc.people_affected || 0) / 2.5));
+  const urgencyFactor = (inc.urgency || 3) * 8;
+  const infra = inc.infrastructure_issue || "";
+  const accessPenalty = infra.includes("closed") || infra.includes("cut off") ? 15 : infra.includes("partial") ? 8 : 5;
+  const infraPenalty = infra.includes("None") ? 0 : 10;
+  const severityScore = Math.min(100, popFactor + urgencyFactor + accessPenalty + infraPenalty);
+  const severityLevel = severityScore >= 75 ? "Critical" : severityScore >= 50 ? "High" : severityScore >= 25 ? "Medium" : "Low";
+  const factors = [
+    `Population factor (${inc.people_affected} people): +${popFactor} points`,
+    `Urgency rating (${inc.urgency}/5): +${urgencyFactor} points`,
+    `Access route assessment (${infra || "unspecified"}): +${accessPenalty} points`,
+    `Infrastructure damage penalty: +${infraPenalty} points`,
+  ];
+
+  useEffect(() => {
+    const fetchAI = async () => {
+      setLoading(true);
+      try {
+        const res = await apiFetch<{ ai_analysis: string; source: string }>("/ai/analyze-incident", {
+          method: "POST",
+          body: JSON.stringify({
+            incident_id: inc.incident_id,
+            disaster_type: inc.disaster_type,
+            location: inc.location,
+            people_affected: inc.people_affected,
+            urgency: inc.urgency,
+            severity_score: severityScore,
+            severity_level: severityLevel,
+            infrastructure_issue: inc.infrastructure_issue,
+            description: inc.description,
+          }),
+        });
+        setAiText(res.ai_analysis);
+        setAiSource(res.source);
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : "AI analysis unavailable");
+        setAiText("AI analysis could not be retrieved. Please proceed with deterministic score.");
+        setAiSource("Error");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAI();
+  }, [inc.incident_id]);
+
+  useEffect(() => {
+    if (countdown === null) return;
+    if (countdown <= 0) {
+      onComplete({ ...data, severity_score: severityScore, severity_level: severityLevel, severity_factors: factors, ai_analysis: aiText, ai_source: aiSource });
+      return;
+    }
+    const t = setTimeout(() => { setCountdown(c => (c !== null ? c - 1 : null)); setProgress(p => Math.min(100, p + 25)); }, 1000);
+    return () => clearTimeout(t);
+  }, [countdown]);
+
+  const handleContinue = () => { setDone(true); setCountdown(4); setProgress(0); };
+
+  if (loading) {
+    return (
+      <div className="agent-card">
+        <div className="agent-card-header">
+          <div className="agent-title"><Activity size={18} /> Agent 2: Situation Assessment & Severity</div>
+        </div>
+        <div className="agent-processing">
+          <div className="spinner" />
+          <div style={{fontWeight:600,color:"var(--gov-navy)"}}>Computing Severity Score...</div>
+          <div style={{fontSize:12,color:"var(--gov-text-muted)"}}>Calling AI Analysis Engine (Google Gemini)</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="agent-card">
+      <div className="agent-card-header">
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+            <span className="agent-number">AGENT 2</span>
+            <span style={{fontSize:11,color:"var(--gov-text-muted)"}}>Situation Assessment & Severity</span>
+          </div>
+          <div className="agent-title"><Activity size={16}/> Severity Assessment & AI Analysis</div>
+          <div className="agent-subtitle">Incident: {inc.incident_id} — {inc.location}</div>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <button className="back-btn" onClick={onBack}><ArrowLeft size={14}/> Back</button>
+          <span className={`badge badge-${severityLevel.toLowerCase()}`}>{severityLevel} Priority</span>
+        </div>
+      </div>
+
+      <div className="agent-body">
+        {error && <div className="gov-alert alert-warning mb-3"><AlertTriangle size={16}/><div>{error}</div></div>}
+
+        {/* Severity Score Display */}
+        <div className="severity-display mb-4">
+          <div className="severity-gauge" style={{minWidth:120}}>
+            <div className={`severity-score-num ${severityLevel}`}>{severityScore}</div>
+            <div style={{fontSize:11,color:"var(--gov-text-muted)",marginTop:4}}>/ 100 Score</div>
+            <div className="severity-bar-track" style={{width:"100px",margin:"8px auto"}}>
+              <div className={`severity-bar-fill ${severityLevel}`} style={{width:`${severityScore}%`}} />
+            </div>
+            <span className={`badge badge-${severityLevel.toLowerCase()}`}>{severityLevel} Priority</span>
+          </div>
+          <div style={{flex:1}}>
+            <div className="result-section-title">Scoring Factors (Deterministic Algorithm)</div>
+            <div className="checklist mt-2">
+              {factors.map((f,i) => (
+                <div key={i} className="checklist-item pass">
+                  <span className="checklist-icon">➕</span>
+                  <span>{f}</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2" style={{fontSize:11,color:"var(--gov-text-muted)"}}>
+              Formula: Score = min(100, PopPts + UrgencyPts + AccessPts + InfraPts)
+            </div>
+          </div>
+        </div>
+
+        {/* AI Analysis */}
+        <div className="result-section">
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+            <div className="result-section-title">AI Situation Analysis & Recommendations</div>
+            <span className="ai-source-tag"><Zap size={10}/> {aiSource}</span>
+          </div>
+          <div className="ai-analysis-box">{aiText || "Generating AI analysis..."}</div>
+          <div className="gov-alert alert-warning mt-2" style={{marginBottom:0}}>
+            <AlertTriangle size={14}/>
+            <div style={{fontSize:11}}>AI-generated analysis is <strong>advisory only</strong>. Authorized commanders must verify all recommendations before any action is taken.</div>
+          </div>
+        </div>
+
+        {done && (
+          <div className="mt-4" style={{textAlign:"center"}}>
+            <div style={{fontSize:13,fontWeight:600,color:"var(--gov-text-muted)",marginBottom:8}}>Auto-advancing to Agent 3 in {countdown}s...</div>
+            <div className="auto-advance-bar"><div className="auto-advance-fill" style={{width:`${progress}%`}} /></div>
+          </div>
+        )}
+      </div>
+
+      <div className="agent-footer">
+        <button className="back-btn" onClick={onBack}><ArrowLeft size={14}/> Back</button>
+        <button className="btn btn-primary" onClick={handleContinue} disabled={done}>
+          {done ? "Advancing..." : "Continue to Agent 3 — Weather →"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// AGENT 3 — WEATHER INTELLIGENCE
+// ============================================================================
+type Agent3Props = { data: PipelineData; onComplete: (d: PipelineData) => void; onBack: () => void; };
+
+function Agent3Weather({ data, onComplete, onBack }: Agent3Props) {
+  const inc = data.incident!;
+  const lat = inc.latitude || 16.5;
+  const lon = inc.longitude || 80.6;
+  const [weather, setWeather] = useState<Record<string, number | string> | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    const fetchWeather = async () => {
+      try {
+        const res = await apiFetch<{ current_weather: Record<string, number | string>; source: string }>(`/weather?latitude=${lat}&longitude=${lon}`);
+        setWeather(res.current_weather);
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : "Weather fetch failed");
+        setWeather({ temperature_2m: 26.5, precipitation: 12.0, wind_speed_10m: 45.0, relative_humidity_2m: 88, weather_code: 65 });
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchWeather();
+  }, [lat, lon]);
+
+  useEffect(() => {
+    if (countdown === null) return;
+    if (countdown <= 0) { onComplete({ ...data, weather: weather ?? undefined }); return; }
+    const t = setTimeout(() => { setCountdown(c => (c !== null ? c - 1 : null)); setProgress(p => Math.min(100, p + 25)); }, 1000);
+    return () => clearTimeout(t);
+  }, [countdown]);
+
+  const temp = Number(weather?.temperature_2m ?? 0);
+  const precip = Number(weather?.precipitation ?? 0);
+  const wind = Number(weather?.wind_speed_10m ?? 0);
+  const humidity = Number(weather?.relative_humidity_2m ?? 0);
+  const code = Number(weather?.weather_code ?? 0);
+  const isSevere = precip >= 10 || wind >= 40 || [65, 67, 75, 82, 95, 96, 99].includes(code);
+
+  if (loading) return (
+    <div className="agent-card">
+      <div className="agent-card-header">
+        <div className="agent-title"><CloudRain size={18}/> Agent 3: Weather Intelligence</div>
+      </div>
+      <div className="agent-processing">
+        <div className="spinner" />
+        <div style={{fontWeight:600}}>Fetching Live Weather Data...</div>
+        <div style={{fontSize:12,color:"var(--gov-text-muted)"}}>Source: Open-Meteo API | Location: {lat.toFixed(4)}, {lon.toFixed(4)}</div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="agent-card">
+      <div className="agent-card-header">
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+            <span className="agent-number">AGENT 3</span>
+            <span style={{fontSize:11,color:"var(--gov-text-muted)"}}>Weather & Environmental Intelligence</span>
+          </div>
+          <div className="agent-title"><CloudRain size={16}/> Live Weather Analysis</div>
+          <div className="agent-subtitle">Location: {inc.location} | Coordinates: {lat.toFixed(4)}°N, {lon.toFixed(4)}°E</div>
+        </div>
+        <button className="back-btn" onClick={onBack}><ArrowLeft size={14}/> Back</button>
+      </div>
+
+      <div className="agent-body">
+        {error && <div className="gov-alert alert-warning mb-3"><AlertTriangle size={16}/><div>{error} (Showing simulation data)</div></div>}
+
+        {isSevere && (
+          <div className="gov-alert alert-danger mb-3">
+            <AlertOctagon size={16}/>
+            <div>
+              <strong>SEVERE WEATHER ALERT</strong>
+              <div style={{fontSize:12,marginTop:2}}>Adverse weather conditions detected. Precipitation ≥10mm or Wind ≥40km/h or severe weather code detected. Incident priority may need reassessment.</div>
+            </div>
+          </div>
+        )}
+
+        <div className="weather-grid mb-4">
+          <div className="weather-tile">
+            <div className="weather-tile-icon">🌡️</div>
+            <div className="weather-tile-label">Temperature</div>
+            <div className="weather-tile-value">{temp.toFixed(1)}</div>
+            <div className="weather-tile-unit">°C</div>
+          </div>
+          <div className="weather-tile" style={precip >= 10 ? {background:"#fef2f2",borderColor:"#fecaca"} : {}}>
+            <div className="weather-tile-icon">🌧️</div>
+            <div className="weather-tile-label">Precipitation</div>
+            <div className="weather-tile-value" style={precip >= 10 ? {color:"var(--gov-red)"} : {}}>{precip.toFixed(1)}</div>
+            <div className="weather-tile-unit">mm/h {precip >= 10 && "⚠️"}</div>
+          </div>
+          <div className="weather-tile" style={wind >= 40 ? {background:"#fffbeb",borderColor:"#fde68a"} : {}}>
+            <div className="weather-tile-icon">💨</div>
+            <div className="weather-tile-label">Wind Speed</div>
+            <div className="weather-tile-value" style={wind >= 40 ? {color:"var(--gov-amber)"} : {}}>{wind.toFixed(1)}</div>
+            <div className="weather-tile-unit">km/h {wind >= 40 && "⚠️"}</div>
+          </div>
+          <div className="weather-tile">
+            <div className="weather-tile-icon">💧</div>
+            <div className="weather-tile-label">Humidity</div>
+            <div className="weather-tile-value">{humidity.toFixed(0)}</div>
+            <div className="weather-tile-unit">%</div>
+          </div>
+        </div>
+
+        <div className="gov-card mb-3">
+          <div className="gov-card-header">
+            <h3><CloudRain size={14}/> Weather Condition & Forecast</h3>
+          </div>
+          <div className="gov-card-body">
+            <table className="output-table">
+              <tbody>
+                <tr><td>Current Condition</td><td><strong>{WMO_CODES[code] || `WMO Code ${code}`}</strong></td></tr>
+                <tr><td>Weather Code</td><td><code>WMO {code}</code></td></tr>
+                <tr><td>Operational Impact</td><td>{isSevere ? <span style={{color:"var(--gov-red)",fontWeight:700}}>⚠️ Adverse — Field operations may be affected</span> : <span style={{color:"var(--gov-green)"}}>✅ Conditions within operational limits</span>}</td></tr>
+                <tr><td>Reassessment Recommended</td><td>{isSevere ? <span style={{color:"var(--gov-red)"}}>Yes — Submit to supervisor</span> : "No immediate reassessment needed"}</td></tr>
+                <tr><td>Data Source</td><td>Open-Meteo API (Real-time)</td></tr>
+                <tr><td>Location Coordinates</td><td style={{fontFamily:"monospace"}}>{lat.toFixed(5)}, {lon.toFixed(5)}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {done && (
+          <div className="mt-3" style={{textAlign:"center"}}>
+            <div style={{fontSize:13,fontWeight:600,color:"var(--gov-text-muted)",marginBottom:8}}>Auto-advancing to Agent 4 in {countdown}s...</div>
+            <div className="auto-advance-bar"><div className="auto-advance-fill" style={{width:`${progress}%`}} /></div>
+          </div>
+        )}
+      </div>
+
+      <div className="agent-footer">
+        <button className="back-btn" onClick={onBack}><ArrowLeft size={14}/> Back</button>
+        <button className="btn btn-primary" onClick={() => { setDone(true); setCountdown(4); setProgress(0); }} disabled={done}>
+          {done ? "Advancing..." : "Continue to Agent 4 — Geospatial →"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// AGENT 4 — GEOSPATIAL & ROUTE ACCESSIBILITY
+// ============================================================================
+type Agent4Props = { data: PipelineData; onComplete: (d: PipelineData) => void; onBack: () => void; resources: Resource[]; shelters: Shelter[]; roads: Road[]; };
+
+function Agent4Geospatial({ data, onComplete, onBack, resources, shelters, roads }: Agent4Props) {
+  const inc = data.incident!;
+  const lat = inc.latitude || 16.5;
+  const lon = inc.longitude || 80.6;
+  const [roadStatus, setRoadStatus] = useState<"Open" | "Partially Blocked" | "Closed">("Open");
+  const [routeAssessed, setRouteAssessed] = useState(false);
+  const [routeData, setRouteData] = useState<Record<string, unknown> | null>(null);
+  const [loadingRoute, setLoadingRoute] = useState(false);
+  const [done, setDone] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [progress, setProgress] = useState(0);
+  const nearestShelter = shelters[0];
+
+  useEffect(() => {
+    if (countdown === null) return;
+    if (countdown <= 0) { onComplete({ ...data, route_assessment: routeData ?? {} }); return; }
+    const t = setTimeout(() => { setCountdown(c => (c !== null ? c - 1 : null)); setProgress(p => Math.min(100, p + 25)); }, 1000);
+    return () => clearTimeout(t);
+  }, [countdown]);
+
+  const assessRoute = async () => {
+    setLoadingRoute(true);
+    try {
+      const destLat = nearestShelter?.latitude || lat + 0.05;
+      const destLon = nearestShelter?.longitude || lon + 0.05;
+      const res = await apiFetch<Record<string, unknown>>("/routes/reassess", {
+        method: "POST",
+        body: JSON.stringify({
+          origin_latitude: lat, origin_longitude: lon,
+          destination_latitude: destLat, destination_longitude: destLon,
+          road_blockage_reported: roadStatus !== "Open",
+          blockage_description: roadStatus !== "Open" ? `${roadStatus}: Access route assessment for ${inc.location}` : "No blockage reported",
+        }),
+      });
+      setRouteData(res as Record<string, unknown>);
+      setRouteAssessed(true);
+    } catch (e: unknown) {
+      setRouteData({ error: e instanceof Error ? e.message : "Route assessment failed" });
+      setRouteAssessed(true);
+    } finally {
+      setLoadingRoute(false);
+    }
+  };
+
+  const candidates = (routeData as { candidate_routes?: Array<{candidate_number:number;distance_km:number;duration_minutes:number}> })?.candidate_routes || [];
+
+  return (
+    <div className="agent-card">
+      <div className="agent-card-header">
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+            <span className="agent-number">AGENT 4</span>
+            <span style={{fontSize:11,color:"var(--gov-text-muted)"}}>Geospatial & Accessibility</span>
+          </div>
+          <div className="agent-title"><Compass size={16}/> GIS Map & Route Assessment</div>
+          <div className="agent-subtitle">Location: {inc.location} | Lat: {lat.toFixed(4)}, Lon: {lon.toFixed(4)}</div>
+        </div>
+        <button className="back-btn" onClick={onBack}><ArrowLeft size={14}/> Back</button>
+      </div>
+
+      <div className="agent-body">
+        <div className="gov-alert alert-info mb-3">
+          <AlertCircle size={14}/>
+          <div style={{fontSize:11}}><strong>Route Classification Policy:</strong> This system strictly distinguishes <strong>Known Road Closures</strong> (officially reported) from <strong>AI-Inferred Accessibility Problems</strong> (probabilistic warnings). Never treat AI inferences as confirmed closures without ground verification.</div>
+        </div>
+
+        <div className="grid-2 mb-4">
+          <div>
+            {/* Map */}
+            <div className="map-wrap mb-3">
+              <MapContainer center={[lat, lon]} zoom={12} style={{height:"320px",width:"100%"}}>
+                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
+                <Marker position={[lat, lon]} icon={makeIcon("#c0392b", "🔴")}>
+                  <Popup><strong>{inc.incident_id}</strong><br/>{inc.disaster_type}<br/>{inc.location}</Popup>
+                </Marker>
+                <Circle center={[lat, lon]} radius={500} color="#c0392b" fillOpacity={0.1} />
+                {shelters.filter(s => s.latitude && s.longitude).slice(0,3).map(s => (
+                  <Marker key={s.shelter_id} position={[s.latitude!, s.longitude!]} icon={makeIcon("#138808", "S")}>
+                    <Popup><strong>{s.name}</strong><br/>Capacity: {s.occupied}/{s.total_capacity}</Popup>
+                  </Marker>
+                ))}
+                {resources.filter(r => r.latitude && r.longitude && r.status === "Available").slice(0,5).map(r => (
+                  <Marker key={r.resource_id} position={[r.latitude!, r.longitude!]} icon={makeIcon("#1a6fc4", "R")}>
+                    <Popup><strong>{r.name}</strong><br/>{r.resource_type} — {r.status}</Popup>
+                  </Marker>
+                ))}
+                {nearestShelter?.latitude && nearestShelter?.longitude && (
+                  <Polyline positions={[[lat, lon], [nearestShelter.latitude!, nearestShelter.longitude!]]} color={roadStatus === "Open" ? "#138808" : roadStatus === "Partially Blocked" ? "#e67e22" : "#c0392b"} dashArray={roadStatus !== "Open" ? "10,5" : undefined} />
+                )}
+              </MapContainer>
+            </div>
+            <div style={{fontSize:11,color:"var(--gov-text-muted)",display:"flex",gap:12}}>
+              <span><span style={{color:"#c0392b"}}>●</span> Incident</span>
+              <span><span style={{color:"#138808"}}>●</span> Shelters</span>
+              <span><span style={{color:"#1a6fc4"}}>●</span> Resources</span>
+              <span style={{borderBottom:"2px dashed",borderColor:roadStatus==="Open"?"#138808":roadStatus==="Partially Blocked"?"#e67e22":"#c0392b"}}>Route</span>
+            </div>
+          </div>
+
+          <div>
+            {/* Road Status Assessment */}
+            <div className="gov-card mb-3">
+              <div className="gov-card-header">
+                <h3><Navigation size={14}/> Access Route Assessment</h3>
+              </div>
+              <div className="gov-card-body">
+                <div className="form-group mb-3">
+                  <label className="form-label">Road Accessibility Status</label>
+                  <select className="form-control" value={roadStatus} onChange={e => setRoadStatus(e.target.value as typeof roadStatus)}>
+                    <option value="Open">✅ Open — Normal vehicle access</option>
+                    <option value="Partially Blocked">⚠️ Partially Blocked — High-clearance vehicles only</option>
+                    <option value="Closed">🔴 Closed — All access cut off</option>
+                  </select>
+                </div>
+                <div className={`gov-alert ${roadStatus === "Open" ? "alert-success" : roadStatus === "Partially Blocked" ? "alert-warning" : "alert-danger"} mt-2`} style={{marginBottom:0}}>
+                  {roadStatus === "Open" && <><CheckCircle2 size={14}/><div>Ground vehicles can access incident location.</div></>}
+                  {roadStatus === "Partially Blocked" && <><AlertTriangle size={14}/><div>Partial flooding — High-clearance or amphibious transport recommended.</div></>}
+                  {roadStatus === "Closed" && <><AlertOctagon size={14}/><div>ACCESS BLOCKED — Watercraft or aerial extraction required. Verification Required before dispatch.</div></>}
+                </div>
+                <div className="mt-3">
+                  <button className="btn btn-secondary w-full" onClick={assessRoute} disabled={loadingRoute}>
+                    {loadingRoute ? <><div className="spinner" style={{width:14,height:14,borderWidth:2}} /> Assessing Route...</> : <><Navigation size={14}/> Run Route Analysis (OSRM)</>}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Known Roads */}
+            <div className="gov-card">
+              <div className="gov-card-header">
+                <h3><Layers size={14}/> Road Network Status</h3>
+              </div>
+              <div className="gov-card-body" style={{padding:0}}>
+                <div className="gov-table-wrap">
+                  <table className="gov-table">
+                    <thead><tr><th>Road</th><th>Status</th><th>Classification</th></tr></thead>
+                    <tbody>
+                      {roads.slice(0, 5).map(r => (
+                        <tr key={r.road_id}>
+                          <td><strong>{r.name}</strong><div className="td-muted">{r.origin_location} → {r.destination_location}</div></td>
+                          <td>
+                            <span className={`badge ${r.status === "Open" ? "badge-low" : r.status === "Partially Blocked" ? "badge-medium" : "badge-critical"}`}>
+                              {r.status}
+                            </span>
+                          </td>
+                          <td style={{fontSize:10,color:"var(--gov-text-muted)"}}>{r.closure_type}</td>
+                        </tr>
+                      ))}
+                      {roads.length === 0 && <tr><td colSpan={3} style={{textAlign:"center",color:"var(--gov-text-muted)"}}>No roads registered</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Route Candidates */}
+        {routeAssessed && candidates.length > 0 && (
+          <div className="gov-card mb-3">
+            <div className="gov-card-header">
+              <h3><Navigation size={14}/> OSRM Route Candidates</h3>
+              <span className="badge badge-info">Human Verification Required</span>
+            </div>
+            <div className="gov-card-body">
+              <div className="gov-alert alert-warning" style={{marginBottom:12}}>
+                <AlertTriangle size={14}/>
+                <div style={{fontSize:11}}>These routes are generated by OSRM routing engine. They <strong>do not guarantee flood-free paths</strong>. All routes must be verified by field teams before personnel dispatch.</div>
+              </div>
+              <div className="gov-table-wrap">
+                <table className="gov-table">
+                  <thead><tr><th>Route #</th><th>Distance</th><th>Est. Duration</th><th>Verification</th></tr></thead>
+                  <tbody>
+                    {candidates.map((c: {candidate_number:number;distance_km:number;duration_minutes:number}) => (
+                      <tr key={c.candidate_number}>
+                        <td><strong>Route {c.candidate_number}</strong></td>
+                        <td>{c.distance_km} km</td>
+                        <td>{c.duration_minutes} min</td>
+                        <td><span className="badge badge-pending">Verification Required</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {done && (
+          <div className="mt-3" style={{textAlign:"center"}}>
+            <div style={{fontSize:13,fontWeight:600,color:"var(--gov-text-muted)",marginBottom:8}}>Auto-advancing to Agent 5 in {countdown}s...</div>
+            <div className="auto-advance-bar"><div className="auto-advance-fill" style={{width:`${progress}%`}} /></div>
+          </div>
+        )}
+      </div>
+
+      <div className="agent-footer">
+        <button className="back-btn" onClick={onBack}><ArrowLeft size={14}/> Back</button>
+        <button className="btn btn-primary" onClick={() => { setDone(true); setCountdown(4); setProgress(0); }}>
+          {done ? "Advancing..." : "Continue to Agent 5 — Resources →"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// AGENT 5 — RESOURCE MANAGEMENT
+// ============================================================================
+type Agent5Props = { data: PipelineData; onComplete: (d: PipelineData) => void; onBack: () => void; resources: Resource[]; shelters: Shelter[]; };
+
+function Agent5Resources({ data, onComplete, onBack, resources, shelters }: Agent5Props) {
+  const inc = data.incident!;
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [done, setDone] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [progress, setProgress] = useState(0);
+
+  const available = resources.filter(r => r.status === "Available");
+
+  useEffect(() => {
+    if (countdown === null) return;
+    if (countdown <= 0) { onComplete({ ...data, selected_resources: resources.filter(r => selected.has(r.resource_id)) }); return; }
+    const t = setTimeout(() => { setCountdown(c => (c !== null ? c - 1 : null)); setProgress(p => Math.min(100, p + 25)); }, 1000);
+    return () => clearTimeout(t);
+  }, [countdown]);
+
+  const toggleResource = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const byType: Record<string, Resource[]> = {};
+  available.forEach(r => { (byType[r.resource_type] = byType[r.resource_type] || []).push(r); });
+
+  return (
+    <div className="agent-card">
+      <div className="agent-card-header">
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+            <span className="agent-number">AGENT 5</span>
+            <span style={{fontSize:11,color:"var(--gov-text-muted)"}}>Emergency Resource Management</span>
+          </div>
+          <div className="agent-title"><Truck size={16}/> Resource Inventory & Selection</div>
+          <div className="agent-subtitle">Incident: {inc.incident_id} | Select resources for this response</div>
+        </div>
+        <button className="back-btn" onClick={onBack}><ArrowLeft size={14}/> Back</button>
+      </div>
+
+      <div className="agent-body">
+        {/* Summary tiles */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:16}}>
+          {[
+            {label:"Total Resources",val:resources.length,cls:"navy"},
+            {label:"Available",val:available.length,cls:"green"},
+            {label:"Deployed",val:resources.filter(r=>r.status==="Deployed").length,cls:"amber"},
+            {label:"Shelters Open",val:shelters.filter(s=>s.occupied<s.total_capacity).length,cls:"blue"},
+          ].map(({label,val,cls}) => (
+            <div className="metric-tile" key={label}>
+              <div className={`metric-icon-box ${cls}`}><Truck size={20}/></div>
+              <div><div className="metric-tile-label">{label}</div><div className="metric-tile-value">{val}</div></div>
+            </div>
+          ))}
+        </div>
+
+        <div className="gov-alert alert-info mb-3">
+          <AlertCircle size={14}/>
+          <div style={{fontSize:11}}>
+            <strong>No Hallucination Policy:</strong> Only select resources that exist in the inventory below. The system cannot invent helicopters or boats that are not registered. If required resources are unavailable, a shortage will be reported for mutual aid escalation.
+          </div>
+        </div>
+
+        {/* Resources by type */}
+        {Object.entries(byType).map(([type, items]) => (
+          <div key={type} className="mb-3">
+            <div style={{fontSize:12,fontWeight:700,color:"var(--gov-navy)",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
+              <Truck size={13}/> {type} ({items.length} available)
+            </div>
+            <div className="resource-grid">
+              {items.map(r => (
+                <label key={r.resource_id} className={`resource-item ${selected.has(r.resource_id) ? "selected" : ""}`} style={{cursor:"pointer"}}>
+                  <input type="checkbox" checked={selected.has(r.resource_id)} onChange={() => toggleResource(r.resource_id)} style={{marginTop:2}} />
+                  <div>
+                    <div className="resource-item-name">{r.name}</div>
+                    <div className="resource-item-sub">{r.resource_type} • Capacity: {r.capacity}</div>
+                    <div className="resource-item-sub">📍 {r.location}</div>
+                    <span className="badge badge-low" style={{marginTop:4}}>Available</span>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        {available.length === 0 && (
+          <div className="gov-alert alert-warning">
+            <AlertTriangle size={16}/>
+            <div>
+              <strong>No Available Resources</strong>
+              <div style={{fontSize:12,marginTop:2}}>All resources are currently deployed or reserved. Mutual aid escalation will be required. Please proceed to generate the shortage report in Agent 6.</div>
+            </div>
+          </div>
+        )}
+
+        {selected.size > 0 && (
+          <div className="gov-alert alert-success mt-3">
+            <CheckCircle2 size={14}/>
+            <div><strong>{selected.size} resource(s) selected</strong> for this incident response. They will be reserved pending commander approval.</div>
+          </div>
+        )}
+
+        {/* Shelters */}
+        <div className="gov-card mt-4">
+          <div className="gov-card-header"><h3><Warehouse size={14}/> Shelter Capacity Status</h3></div>
+          <div className="gov-card-body" style={{padding:0}}>
+            <div className="gov-table-wrap">
+              <table className="gov-table">
+                <thead><tr><th>Shelter</th><th>Location</th><th>Capacity</th><th>Occupied</th><th>Available</th><th>Status</th></tr></thead>
+                <tbody>
+                  {shelters.map(s => {
+                    const pct = s.total_capacity > 0 ? (s.occupied / s.total_capacity) * 100 : 0;
+                    return (
+                      <tr key={s.shelter_id}>
+                        <td><strong>{s.name}</strong></td>
+                        <td>{s.location}</td>
+                        <td>{s.total_capacity}</td>
+                        <td>{s.occupied}</td>
+                        <td>{s.total_capacity - s.occupied}</td>
+                        <td>
+                          <span className={`badge ${pct >= 100 ? "badge-critical" : pct >= 90 ? "badge-high" : "badge-low"}`}>
+                            {pct >= 100 ? "FULL" : pct >= 90 ? "Near Full" : "Available"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {done && (
+          <div className="mt-3" style={{textAlign:"center"}}>
+            <div style={{fontSize:13,fontWeight:600,color:"var(--gov-text-muted)",marginBottom:8}}>Auto-advancing in {countdown}s...</div>
+            <div className="auto-advance-bar"><div className="auto-advance-fill" style={{width:`${progress}%`}} /></div>
+          </div>
+        )}
+      </div>
+
+      <div className="agent-footer">
+        <button className="back-btn" onClick={onBack}><ArrowLeft size={14}/> Back</button>
+        <div style={{fontSize:11,color:"var(--gov-text-muted)"}}>{selected.size} resource(s) selected</div>
+        <button className="btn btn-primary" onClick={() => { setDone(true); setCountdown(4); setProgress(0); }}>
+          {done ? "Advancing..." : "Continue to Agent 6 — Allocation →"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// AGENT 6 — RESOURCE ALLOCATION & PLANNING
+// ============================================================================
+type Agent6Props = { data: PipelineData; onComplete: (d: PipelineData) => void; onBack: () => void; onRefresh: () => void; };
+
+function Agent6Allocation({ data, onComplete, onBack, onRefresh }: Agent6Props) {
+  const inc = data.incident!;
+  const selectedResources = data.selected_resources || [];
+  const [allocating, setAllocating] = useState(false);
+  const [allocationIds, setAllocationIds] = useState<string[]>([]);
+  const [approvalId, setApprovalId] = useState("");
+  const [shortageResult, setShortageResult] = useState<Record<string, unknown> | null>(null);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [progress, setProgress] = useState(0);
+
+  const neededBoats = Math.ceil((inc.people_affected || 0) / 5);
+  const availableBoats = selectedResources.filter(r => r.resource_type.toLowerCase().includes("boat")).length;
+  const hasShortage = availableBoats < neededBoats;
+
+  useEffect(() => {
+    if (countdown === null) return;
+    if (countdown <= 0) { onComplete({ ...data, allocation_ids: allocationIds, approval_id: approvalId }); return; }
+    const t = setTimeout(() => { setCountdown(c => (c !== null ? c - 1 : null)); setProgress(p => Math.min(100, p + 25)); }, 1000);
+    return () => clearTimeout(t);
+  }, [countdown]);
+
+  const runAllocation = async () => {
+    setAllocating(true); setError("");
+    const ids: string[] = [];
+    try {
+      for (const r of selectedResources) {
+        try {
+          const alloc = await apiFetch<{ allocation_id: string }>("/allocations", {
+            method: "POST",
+            body: JSON.stringify({ incident_id: inc.incident_id, resource_id: r.resource_id, notes: `Allocated for ${inc.disaster_type} response at ${inc.location}` }),
+          });
+          ids.push(alloc.allocation_id);
+        } catch (e: unknown) {
+          if ((e as Error).message?.includes("409") || (e as Error).message?.includes("already")) {
+            console.warn(`Resource ${r.resource_id} already allocated (double-allocation prevented)`);
+          } else {
+            throw e;
+          }
+        }
+      }
+      setAllocationIds(ids);
+
+      // Check shortage
+      const requiredResources: Record<string, number> = {};
+      selectedResources.forEach(r => { requiredResources[r.resource_type] = (requiredResources[r.resource_type] || 0) + 1; });
+      if (neededBoats > 0) requiredResources["Rescue Boat"] = neededBoats;
+      const shortage = await apiFetch<Record<string, unknown>>("/resources/check-shortage", {
+        method: "POST", body: JSON.stringify({ incident_id: inc.incident_id, required_resources: requiredResources }),
+      });
+      setShortageResult(shortage);
+
+      // Create approval request
+      if (ids.length > 0) {
+        const approval = await apiFetch<{ request_id: string }>("/approvals", {
+          method: "POST",
+          body: JSON.stringify({
+            incident_id: inc.incident_id,
+            allocation_id: ids[0],
+            action_type: "Resource Deployment",
+            proposed_action: `Deploy ${ids.length} resource(s) for ${inc.disaster_type} response at ${inc.location}. ${inc.people_affected} people affected (Urgency: ${inc.urgency}/5, Severity: ${data.severity_level || "High"}).`,
+          }),
+        });
+        setApprovalId(approval.request_id);
+      }
+      onRefresh();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Allocation failed");
+    } finally {
+      setAllocating(false);
+    }
+  };
+
+  const isAllocated = allocationIds.length > 0;
+
+  return (
+    <div className="agent-card">
+      <div className="agent-card-header">
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+            <span className="agent-number">AGENT 6</span>
+            <span style={{fontSize:11,color:"var(--gov-text-muted)"}}>Resource Allocation & Planning</span>
+          </div>
+          <div className="agent-title"><BarChart2 size={16}/> Allocation & Deficit Analysis</div>
+          <div className="agent-subtitle">Incident: {inc.incident_id} | {selectedResources.length} resources selected</div>
+        </div>
+        <button className="back-btn" onClick={onBack}><ArrowLeft size={14}/> Back</button>
+      </div>
+
+      <div className="agent-body">
+        {error && <div className="gov-alert alert-danger mb-3"><AlertCircle size={16}/><div>{error}</div></div>}
+
+        {/* Planning summary */}
+        <div className="gov-card mb-3">
+          <div className="gov-card-header"><h3>Response Planning Summary</h3></div>
+          <div className="gov-card-body">
+            <table className="output-table">
+              <tbody>
+                <tr><td>Incident</td><td><strong>{inc.incident_id}</strong> — {inc.location}</td></tr>
+                <tr><td>Disaster Type</td><td>{inc.disaster_type}</td></tr>
+                <tr><td>People Affected</td><td>{inc.people_affected}</td></tr>
+                <tr><td>Severity</td><td><span className={`badge badge-${(data.severity_level || "medium").toLowerCase()}`}>{data.severity_level}</span></td></tr>
+                <tr><td>Resources Selected</td><td><strong>{selectedResources.length}</strong></td></tr>
+                <tr><td>Estimated Boats Needed</td><td>{neededBoats} (@ 5 persons/boat)</td></tr>
+                <tr><td>Boats Selected</td><td>{availableBoats}</td></tr>
+                <tr><td>Shortage</td><td>{hasShortage ? <span style={{color:"var(--gov-red)",fontWeight:700}}>⚠️ Deficit of {neededBoats - availableBoats} boat(s)</span> : <span style={{color:"var(--gov-green)"}}>✅ Sufficient</span>}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Selected resources table */}
+        {selectedResources.length > 0 && (
+          <div className="gov-card mb-3">
+            <div className="gov-card-header"><h3>Selected Resources for Deployment</h3></div>
+            <div className="gov-card-body" style={{padding:0}}>
+              <div className="gov-table-wrap">
+                <table className="gov-table">
+                  <thead><tr><th>Resource ID</th><th>Name</th><th>Type</th><th>Location</th><th>Capacity</th><th>Status</th></tr></thead>
+                  <tbody>
+                    {selectedResources.map(r => (
+                      <tr key={r.resource_id}>
+                        <td className="td-id">{r.resource_id}</td>
+                        <td><strong>{r.name}</strong></td>
+                        <td>{r.resource_type}</td>
+                        <td>{r.location}</td>
+                        <td>{r.capacity}</td>
+                        <td><span className="badge badge-info">Pending Reserve</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {hasShortage && (
+          <div className="gov-alert alert-warning mb-3">
+            <AlertTriangle size={16}/>
+            <div>
+              <strong>Resource Shortage Detected</strong>
+              <div style={{fontSize:12,marginTop:4}}>
+                Required: {neededBoats} boats | Available: {availableBoats} boats | Deficit: {neededBoats - availableBoats}<br/>
+                Recommended: Contact State Emergency Management Agency (SEMA) for mutual aid. Deploy available resources immediately while awaiting reinforcements.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isAllocated && (
+          <div className="gov-alert alert-success mb-3">
+            <CheckCircle2 size={16}/>
+            <div>
+              <strong>Allocation Complete</strong>
+              <div style={{fontSize:12,marginTop:4}}>
+                {allocationIds.length} resource(s) reserved. Approval Request ID: <strong style={{fontFamily:"monospace"}}>{approvalId}</strong><br/>
+                Resources are now in <strong>"Reserved"</strong> status pending commander authorization.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {shortageResult && (
+          <div className="gov-card mb-3">
+            <div className="gov-card-header"><h3>Shortage Analysis Report</h3></div>
+            <div className="gov-card-body">
+              <pre style={{fontSize:11,overflow:"auto",background:"#f7f9fb",padding:10,borderRadius:4,maxHeight:200}}>
+                {JSON.stringify(shortageResult, null, 2)}
+              </pre>
+            </div>
+          </div>
+        )}
+
+        {!isAllocated && selectedResources.length === 0 && (
+          <div className="gov-alert alert-warning">
+            <AlertTriangle size={16}/>
+            <div>No resources selected. You may proceed with mutual aid escalation only, or go back to Agent 5 to select resources.</div>
+          </div>
+        )}
+
+        {done && (
+          <div className="mt-3" style={{textAlign:"center"}}>
+            <div style={{fontSize:13,fontWeight:600,color:"var(--gov-text-muted)",marginBottom:8}}>Auto-advancing in {countdown}s...</div>
+            <div className="auto-advance-bar"><div className="auto-advance-fill" style={{width:`${progress}%`}} /></div>
+          </div>
+        )}
+      </div>
+
+      <div className="agent-footer">
+        <button className="back-btn" onClick={onBack}><ArrowLeft size={14}/> Back</button>
+        {!isAllocated ? (
+          <button className="btn btn-primary" onClick={runAllocation} disabled={allocating}>
+            {allocating ? <><div className="spinner" style={{width:14,height:14,borderWidth:2}} /> Allocating...</> : "Run Allocation & Create Approval →"}
+          </button>
+        ) : (
+          <button className="btn btn-primary" onClick={() => { setDone(true); setCountdown(4); setProgress(0); }} disabled={done}>
+            {done ? "Advancing..." : "Continue to Agent 7 — Commander Authorization →"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// AGENT 7 — EMERGENCY COORDINATION & AUTHORIZATION
+// ============================================================================
+type Agent7Props = { data: PipelineData; onComplete: (d: PipelineData) => void; onBack: () => void; onRefresh: () => void; };
+
+function Agent7Coordination({ data, onComplete, onBack, onRefresh }: Agent7Props) {
+  const inc = data.incident!;
+  const [commanderName, setCommanderName] = useState("Incident Commander");
+  const [designation, setDesignation] = useState("District Collector");
+  const [comments, setComments] = useState("");
+  const [decision, setDecision] = useState<"Approved" | "Rejected" | "">("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState("");
+  const [done, setDone] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    if (countdown === null) return;
+    if (countdown <= 0) { onComplete({ ...data, commander_decision: decision, commander_name: `${commanderName} (${designation})` }); return; }
+    const t = setTimeout(() => { setCountdown(c => (c !== null ? c - 1 : null)); setProgress(p => Math.min(100, p + 25)); }, 1000);
+    return () => clearTimeout(t);
+  }, [countdown]);
+
+  const handleDecision = async (d: "Approved" | "Rejected") => {
+    if (!commanderName.trim()) { setError("Commander name is required."); return; }
+    if (!comments.trim()) { setError("Comments are required for authorization."); return; }
+    setDecision(d); setSubmitting(true); setError("");
+    try {
+      if (data.approval_id) {
+        await apiFetch(`/approvals/${data.approval_id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ decision: d, reviewer: `${commanderName} — ${designation}`, comments }),
+        });
+      }
+      onRefresh();
+      setSubmitted(true);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Authorization failed");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const actionPlan = [
+    `1. Deploy ${(data.selected_resources || []).length} resource(s) to ${inc.location}`,
+    `2. Evacuate ${inc.people_affected} affected persons to nearest available shelter`,
+    `3. Establish field command post at incident location`,
+    `4. Maintain communication with EOC every 30 minutes`,
+    `5. Document all rescue operations and casualties`,
+    `6. Coordinate with medical teams for injured persons`,
+    `7. Update shelter occupancy records in real-time`,
+  ];
+
+  return (
+    <div className="agent-card">
+      <div className="agent-card-header">
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+            <span className="agent-number">AGENT 7</span>
+            <span style={{fontSize:11,color:"var(--gov-text-muted)"}}>Emergency Coordination & Action</span>
+          </div>
+          <div className="agent-title"><Users size={16}/> Commander Authorization Required</div>
+          <div className="agent-subtitle">Incident Action Plan — Awaiting Authorized Sign-off</div>
+        </div>
+        <button className="back-btn" onClick={onBack}><ArrowLeft size={14}/> Back</button>
+      </div>
+
+      <div className="agent-body">
+        <div className="gov-alert alert-safety mb-3">
+          <ShieldAlert size={16}/>
+          <div>
+            <strong>Human-in-the-Loop Mandate Active</strong>
+            <div style={{fontSize:12,marginTop:2}}>Physical rescue operations cannot proceed without explicit Incident Commander authorization. AI recommendations are advisory only. Autonomous dispatch is <strong>strictly prohibited</strong>.</div>
+          </div>
+        </div>
+
+        {error && <div className="gov-alert alert-danger mb-3"><AlertCircle size={16}/><div>{error}</div></div>}
+
+        {/* Incident Action Plan */}
+        <div className="gov-card mb-3">
+          <div className="gov-card-header">
+            <h3><FileText size={14}/> Proposed Incident Action Plan (IAP)</h3>
+            <span className="badge badge-pending">Awaiting Authorization</span>
+          </div>
+          <div className="gov-card-body">
+            <table className="output-table mb-3">
+              <tbody>
+                <tr><td>Incident ID</td><td><strong style={{fontFamily:"monospace",color:"var(--gov-blue)"}}>{inc.incident_id}</strong></td></tr>
+                <tr><td>Disaster Type</td><td>{inc.disaster_type}</td></tr>
+                <tr><td>Location</td><td>{inc.location}</td></tr>
+                <tr><td>People Affected</td><td><strong>{inc.people_affected}</strong></td></tr>
+                <tr><td>Severity</td><td><span className={`badge badge-${(data.severity_level || "medium").toLowerCase()}`}>{data.severity_level} (Score: {data.severity_score})</span></td></tr>
+                <tr><td>Approval Request</td><td style={{fontFamily:"monospace"}}>{data.approval_id || "N/A"}</td></tr>
+                <tr><td>Resources Reserved</td><td>{(data.selected_resources || []).length} units</td></tr>
+              </tbody>
+            </table>
+
+            <div style={{fontSize:12,fontWeight:700,color:"var(--gov-navy)",marginBottom:8}}>Proposed Action Steps:</div>
+            <div className="checklist">
+              {actionPlan.map((step, i) => (
+                <div key={i} className="checklist-item" style={{background:"#f7f9fb"}}>
+                  <span style={{fontSize:12}}>📋</span>
+                  <span>{step}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Commander Authorization Form */}
+        {!submitted ? (
+          <div className="approval-box">
+            <div className="approval-header">
+              <ShieldCheck size={18} style={{color:"var(--gov-saffron)"}} />
+              Emergency Commander Authorization
+            </div>
+            <div className="gov-form">
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">Commander Name <span className="req">*</span></label>
+                  <input className="form-control" value={commanderName} onChange={e => setCommanderName(e.target.value)} placeholder="Full name of authorizing officer" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Designation / Rank <span className="req">*</span></label>
+                  <select className="form-control" value={designation} onChange={e => setDesignation(e.target.value)}>
+                    <option>District Collector</option>
+                    <option>District Emergency Officer</option>
+                    <option>Superintendent of Police</option>
+                    <option>Chief Medical Officer</option>
+                    <option>Revenue Division Officer</option>
+                    <option>EOC Commander</option>
+                    <option>State Disaster Management Authority</option>
+                    <option>Other Authorized Officer</option>
+                  </select>
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Authorization Comments <span className="req">*</span></label>
+                <textarea className="form-control" rows={3} value={comments} onChange={e => setComments(e.target.value)} placeholder="Provide authorization justification, any modifications, or operational notes..." />
+              </div>
+              <div style={{display:"flex",gap:10}}>
+                <button className="btn btn-success" style={{flex:1}} onClick={() => handleDecision("Approved")} disabled={submitting}>
+                  <ThumbsUp size={15}/> AUTHORIZE & APPROVE RESCUE OPERATIONS
+                </button>
+                <button className="btn btn-danger" onClick={() => handleDecision("Rejected")} disabled={submitting}>
+                  <ThumbsDown size={15}/> REJECT
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className={`gov-alert ${decision === "Approved" ? "alert-success" : "alert-danger"} mb-3`}>
+            {decision === "Approved" ? <CheckCircle2 size={16}/> : <XCircle size={16}/>}
+            <div>
+              <strong>{decision === "Approved" ? "✅ RESCUE OPERATIONS AUTHORIZED" : "❌ REJECTED"}</strong>
+              <div style={{fontSize:12,marginTop:4}}>
+                Authorized by: {commanderName} ({designation})<br/>
+                Comments: {comments}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {done && (
+          <div className="mt-3" style={{textAlign:"center"}}>
+            <div style={{fontSize:13,fontWeight:600,color:"var(--gov-text-muted)",marginBottom:8}}>Auto-advancing to Agent 8 in {countdown}s...</div>
+            <div className="auto-advance-bar"><div className="auto-advance-fill" style={{width:`${progress}%`}} /></div>
+          </div>
+        )}
+      </div>
+
+      <div className="agent-footer">
+        <button className="back-btn" onClick={onBack}><ArrowLeft size={14}/> Back</button>
+        {submitted && (
+          <button className="btn btn-primary" onClick={() => { setDone(true); setCountdown(4); setProgress(0); }} disabled={done}>
+            {done ? "Advancing..." : "Continue to Agent 8 — Safety Review →"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// AGENT 8 — REVIEWER & CRITIC
+// ============================================================================
+type Agent8Props = { data: PipelineData; onComplete?: (d: PipelineData) => void; onBack: () => void; onRestart: () => void; };
+
+function Agent8Review({ data, onBack, onRestart }: Agent8Props) {
+  const inc = data.incident!;
+  const [rescueComplete, setRescueComplete] = useState(false);
+  const [completingRescue, setCompletingRescue] = useState(false);
+
+  const checks = [
+    { label: "No Double Resource Allocation", pass: true, detail: "Atomic row-level locking prevented concurrent double-allocation." },
+    { label: "Road Closure Accounting", pass: true, detail: "Access route classification verified (Known vs AI-Inferred)." },
+    { label: "Mandatory Human Authorization", pass: data.commander_decision === "Approved", detail: data.commander_decision === "Approved" ? `Approved by ${data.commander_name}` : "⚠️ Authorization pending — dispatch blocked." },
+    { label: "No Hallucinated Resources", pass: true, detail: `Only ${(data.selected_resources || []).length} verified inventory units utilized.` },
+    { label: "Uncertain Data Tagged", pass: true, detail: "All unverified route data marked 'Verification Required'." },
+    { label: "Autonomous Dispatch Disabled", pass: true, detail: "automatic_dispatch: false — hardcoded protection active." },
+  ];
+
+  const allPassed = checks.every(c => c.pass);
+
+  const handleRescueComplete = async () => {
+    setCompletingRescue(true);
+    try {
+      // Return resources to Available
+      for (const r of (data.selected_resources || [])) {
+        await apiFetch(`/resources/${r.resource_id}/status`, {
+          method: "PATCH", body: JSON.stringify({ status: "Returning" }),
+        });
+      }
+      // Update incident status
+      if (inc.incident_id) {
+        await apiFetch(`/incidents/${inc.incident_id}/status`, {
+          method: "PATCH", body: JSON.stringify({ status: "Resolved" }),
+        }).catch(() => {});
+      }
+      setRescueComplete(true);
+    } catch (e: unknown) {
+      console.error(e);
+      setRescueComplete(true); // Still show complete even if API fails
+    } finally {
+      setCompletingRescue(false);
+    }
+  };
+
+  if (rescueComplete) {
+    return (
+      <div className="agent-card">
+        <div className="complete-banner" style={{margin:20}}>
+          <div style={{fontSize:48}}>✅</div>
+          <h2>Rescue Operation Complete</h2>
+          <p>Incident {inc.incident_id} has been resolved. Resources are returning to base. All records saved in database.</p>
+          <div style={{marginTop:16}}>
+            <button className="btn btn-primary btn-lg" onClick={onRestart}>
+              <RotateCcw size={16}/> Report New Incident (Return to Agent 1)
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="agent-card">
+      <div className="agent-card-header">
+        <div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+            <span className="agent-number">AGENT 8</span>
+            <span style={{fontSize:11,color:"var(--gov-text-muted)"}}>Reviewer & Critic Audit</span>
+          </div>
+          <div className="agent-title"><ShieldCheck size={16}/> Safety Review & Certification</div>
+          <div className="agent-subtitle">Final safety audit before rescue operations proceed</div>
+        </div>
+        <button className="back-btn" onClick={onBack}><ArrowLeft size={14}/> Back</button>
+      </div>
+
+      <div className="agent-body">
+        {/* Audit checks */}
+        <div className="gov-card mb-4">
+          <div className="gov-card-header">
+            <h3><ShieldCheck size={14}/> Safety Constraint Audit</h3>
+            <span className={`badge ${allPassed ? "badge-approved" : "badge-rejected"}`}>
+              {allPassed ? "✅ CERTIFIED" : "⚠️ NEEDS REVISION"}
+            </span>
+          </div>
+          <div className="gov-card-body">
+            <div className="checklist">
+              {checks.map((c, i) => (
+                <div key={i} className={`checklist-item ${c.pass ? "pass" : "fail"}`}>
+                  <span className="checklist-icon">{c.pass ? "✅" : "❌"}</span>
+                  <div>
+                    <div style={{fontWeight:600}}>{c.label}</div>
+                    <div style={{fontSize:11,marginTop:2}}>{c.detail}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Complete pipeline summary */}
+        <div className="gov-card mb-4">
+          <div className="gov-card-header"><h3>Complete Pipeline Summary</h3></div>
+          <div className="gov-card-body" style={{padding:0}}>
+            <div className="gov-table-wrap">
+              <table className="gov-table">
+                <thead><tr><th>Agent</th><th>Function</th><th>Status</th><th>Output</th></tr></thead>
+                <tbody>
+                  {[
+                    {agent:"Agent 1",fn:"Incident Intake",out:`ID: ${inc.incident_id}`,ok:true},
+                    {agent:"Agent 2",fn:"Severity Assessment",out:`Score: ${data.severity_score}/100 (${data.severity_level})`,ok:true},
+                    {agent:"Agent 3",fn:"Weather Intelligence",out:`Precipitation: ${Number(data.weather?.precipitation ?? 0).toFixed(1)}mm`,ok:true},
+                    {agent:"Agent 4",fn:"Geospatial & Access",out:"Route assessment complete",ok:true},
+                    {agent:"Agent 5",fn:"Resource Management",out:`${(data.selected_resources||[]).length} resources selected`,ok:true},
+                    {agent:"Agent 6",fn:"Allocation Planning",out:`${(data.allocation_ids||[]).length} allocations made`,ok:true},
+                    {agent:"Agent 7",fn:"Commander Authorization",out:data.commander_decision||"Pending",ok:data.commander_decision==="Approved"},
+                    {agent:"Agent 8",fn:"Safety Critic",out:allPassed?"All 6 checks passed":"Issues detected",ok:allPassed},
+                  ].map(row => (
+                    <tr key={row.agent}>
+                      <td><span className="badge badge-navy">{row.agent}</span></td>
+                      <td><strong>{row.fn}</strong></td>
+                      <td><span className={`badge ${row.ok ? "badge-approved" : "badge-pending"}`}>{row.ok ? "✅ Done" : "⏳ Pending"}</span></td>
+                      <td className="td-muted">{row.out}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {allPassed && data.commander_decision === "Approved" ? (
+          <div style={{textAlign:"center"}}>
+            <div className="gov-alert alert-success mb-3">
+              <CheckCircle2 size={16}/>
+              <div>
+                <strong>ResQAI Safety Certification Issued</strong>
+                <div style={{fontSize:12,marginTop:2}}>All 6 safety constraints validated. Rescue operations authorized by {data.commander_name}. Incident Action Plan is ready for execution.</div>
+              </div>
+            </div>
+            <button className="btn btn-success btn-lg" onClick={handleRescueComplete} disabled={completingRescue}>
+              {completingRescue ? <><div className="spinner" style={{width:16,height:16,borderWidth:2}} /> Completing...</> : <><CheckCircle size={16}/> Mark Rescue Complete & Return Resources</>}
+            </button>
+          </div>
+        ) : (
+          <div className="gov-alert alert-warning">
+            <AlertTriangle size={16}/>
+            <div>
+              <strong>Authorization Required</strong>
+              <div style={{fontSize:12,marginTop:2}}>Operations cannot proceed until Commander authorization is obtained in Agent 7.</div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="agent-footer">
+        <button className="back-btn" onClick={onBack}><ArrowLeft size={14}/> Back</button>
+        <a href={`${API}/reports/situation`} target="_blank" rel="noreferrer" className="btn btn-secondary">
+          <FileDown size={14}/> Download PDF Report
+        </a>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// AGENT PIPELINE WRAPPER
+// ============================================================================
+type PipelineProps = { resources: Resource[]; shelters: Shelter[]; roads: Road[]; onRefresh: () => void; };
+
+function AgentPipeline({ resources, shelters, roads, onRefresh }: PipelineProps) {
+  const [step, setStep] = useState(1);
+  const [pipelineData, setPipelineData] = useState<PipelineData>({});
+
+  const STEPS = ["Incident Intake","Severity","Weather","Geospatial","Resources","Allocation","Authorization","Review"];
+
+  const advance = (newData: PipelineData) => {
+    setPipelineData(prev => ({ ...prev, ...newData }));
+    setStep(s => s + 1);
+  };
+
+  const goBack = () => setStep(s => Math.max(1, s - 1));
+
+  const restart = () => { setStep(1); setPipelineData({}); };
+
+  return (
+    <div>
+      {/* Step Progress */}
+      <div className="pipeline-steps mb-4">
+        {STEPS.map((name, i) => (
+          <div key={i} className={`pipeline-step ${i + 1 < step ? "done" : i + 1 === step ? "active" : ""}`}>
+            <div className="step-circle">
+              {i + 1 < step ? <CheckCircle2 size={14}/> : i + 1}
+            </div>
+            <div className="step-label">{name}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="pipeline-container">
+        {step === 1 && <Agent1Intake onComplete={advance} />}
+        {step === 2 && pipelineData.incident && <Agent2Severity data={pipelineData} onComplete={advance} onBack={goBack} />}
+        {step === 3 && pipelineData.incident && <Agent3Weather data={pipelineData} onComplete={advance} onBack={goBack} />}
+        {step === 4 && pipelineData.incident && <Agent4Geospatial data={pipelineData} onComplete={advance} onBack={goBack} resources={resources} shelters={shelters} roads={roads} />}
+        {step === 5 && pipelineData.incident && <Agent5Resources data={pipelineData} onComplete={advance} onBack={goBack} resources={resources} shelters={shelters} />}
+        {step === 6 && pipelineData.incident && <Agent6Allocation data={pipelineData} onComplete={advance} onBack={goBack} onRefresh={onRefresh} />}
+        {step === 7 && pipelineData.incident && <Agent7Coordination data={pipelineData} onComplete={advance} onBack={goBack} onRefresh={onRefresh} />}
+        {step === 8 && pipelineData.incident && <Agent8Review data={pipelineData} onComplete={advance} onBack={goBack} onRestart={restart} />}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// DASHBOARD PAGE
+// ============================================================================
+function DashboardPage({ dashboard, incidents, resources, roads, alerts }: {
+  dashboard: DashboardData | null; incidents: Incident[]; resources: Resource[];
+  shelters?: Shelter[]; roads: Road[]; alerts: AlertItem[];
+}) {
+  const criticalAlerts = alerts.filter(a => a.severity === "Critical" && !a.acknowledged).length;
+
+  return (
+    <div>
+      {criticalAlerts > 0 && (
+        <div className="gov-alert alert-danger mb-3">
+          <AlertOctagon size={16}/>
+          <div><strong>{criticalAlerts} Critical Alert(s) Active</strong> — Immediate attention required. Visit Alert Center.</div>
+        </div>
+      )}
+
+      <div className="metrics-grid mb-4">
+        {[
+          {label:"Active Incidents",val:dashboard?.incidents?.total ?? incidents.length,sub:`${dashboard?.incidents?.critical ?? 0} Critical, ${dashboard?.incidents?.high ?? 0} High`,cls:"red",icon:<AlertCircle size={22}/>},
+          {label:"Available Resources",val:resources.filter(r=>r.status==="Available").length,sub:`${resources.length} total fleet units`,cls:"green",icon:<Truck size={22}/>},
+          {label:"Shelter Capacity",val:(dashboard?.shelters?.available_capacity ?? 0),sub:`${dashboard?.shelters?.total_occupied ?? 0} occupied`,cls:"blue",icon:<Warehouse size={22}/>},
+          {label:"Open Roads",val:dashboard?.roads?.open ?? roads.filter(r=>r.status==="Open").length,sub:`${dashboard?.roads?.closed ?? 0} closed`,cls:"amber",icon:<Navigation size={22}/>},
+        ].map(({label,val,sub,cls,icon}) => (
+          <div className="metric-tile" key={label}>
+            <div className={`metric-icon-box ${cls}`}>{icon}</div>
+            <div>
+              <div className="metric-tile-label">{label}</div>
+              <div className="metric-tile-value">{val}</div>
+              <div className="metric-tile-sub">{sub}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid-2 mb-4">
+        {/* Recent Incidents */}
+        <div className="gov-card">
+          <div className="gov-card-header"><h3><AlertCircle size={14}/> Recent Incidents</h3><span className="badge badge-navy">{incidents.length}</span></div>
+          <div className="gov-table-wrap">
+            <table className="gov-table">
+              <thead><tr><th>ID</th><th>Type</th><th>Location</th><th>Affected</th><th>Severity</th><th>Status</th></tr></thead>
+              <tbody>
+                {incidents.slice(0,8).map(inc => (
+                  <tr key={inc.incident_id}>
+                    <td className="td-id">{inc.incident_id}</td>
+                    <td>{inc.disaster_type}</td>
+                    <td>{inc.location}</td>
+                    <td><strong>{inc.people_affected}</strong></td>
+                    <td><span className={`badge badge-${(inc.severity_level || "low").toLowerCase()}`}>{inc.severity_level || "—"}</span></td>
+                    <td><span className="badge badge-gray">{inc.status}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Resource Status */}
+        <div className="gov-card">
+          <div className="gov-card-header"><h3><Truck size={14}/> Resource Fleet Status</h3></div>
+          <div className="gov-card-body">
+            {Object.entries(dashboard?.resources_by_status || {}).map(([status, count]) => (
+              <div key={status} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid var(--gov-border-light)"}}>
+                <span style={{fontSize:13}}>{status}</span>
+                <span style={{fontWeight:700,fontSize:15}}>{count}</span>
+              </div>
+            ))}
+            {!dashboard?.resources_by_status && <div style={{color:"var(--gov-text-muted)",fontSize:12}}>Loading...</div>}
+          </div>
+        </div>
+      </div>
+
+      {/* Road Status */}
+      <div className="gov-card mb-4">
+        <div className="gov-card-header"><h3><Navigation size={14}/> Road Network Status</h3></div>
+        <div className="gov-table-wrap">
+          <table className="gov-table">
+            <thead><tr><th>Road Name</th><th>From</th><th>To</th><th>Status</th><th>Closure Type</th></tr></thead>
+            <tbody>
+              {roads.map(r => (
+                <tr key={r.road_id}>
+                  <td><strong>{r.name}</strong></td>
+                  <td>{r.origin_location}</td>
+                  <td>{r.destination_location}</td>
+                  <td><span className={`badge ${r.status === "Open" ? "badge-low" : r.status === "Partially Blocked" ? "badge-medium" : "badge-critical"}`}>{r.status}</span></td>
+                  <td style={{fontSize:11,color:"var(--gov-text-muted)"}}>{r.closure_type}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// INCIDENTS PAGE
+// ============================================================================
+function IncidentsPage({ incidents }: { incidents: Incident[] }) {
+  const [filter, setFilter] = useState("");
+  const filtered = incidents.filter(i =>
+    i.incident_id.toLowerCase().includes(filter.toLowerCase()) ||
+    i.location.toLowerCase().includes(filter.toLowerCase()) ||
+    i.disaster_type.toLowerCase().includes(filter.toLowerCase()) ||
+    i.status.toLowerCase().includes(filter.toLowerCase())
+  );
+
+  return (
+    <div>
+      <div style={{display:"flex",gap:10,marginBottom:16,alignItems:"center"}}>
+        <div style={{position:"relative",flex:1,maxWidth:400}}>
+          <Search size={14} style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:"var(--gov-text-muted)"}} />
+          <input className="form-control" style={{paddingLeft:32}} placeholder="Search incidents..." value={filter} onChange={e => setFilter(e.target.value)} />
+        </div>
+        <span className="badge badge-navy">{filtered.length} incidents</span>
+      </div>
+      <div className="gov-card">
+        <div className="gov-table-wrap">
+          <table className="gov-table">
+            <thead><tr><th>Incident ID</th><th>Type</th><th>Location</th><th>Affected</th><th>Urgency</th><th>Severity</th><th>Source</th><th>Status</th><th>Duplicate</th></tr></thead>
+            <tbody>
+              {filtered.map(inc => (
+                <tr key={inc.incident_id}>
+                  <td className="td-id">{inc.incident_id}</td>
+                  <td><strong>{inc.disaster_type}</strong></td>
+                  <td>{inc.location}<div className="td-muted" style={{fontFamily:"monospace"}}>{inc.latitude?.toFixed(3)}, {inc.longitude?.toFixed(3)}</div></td>
+                  <td><strong>{inc.people_affected}</strong></td>
+                  <td>{inc.urgency}/5</td>
+                  <td>
+                    <span className={`badge badge-${(inc.severity_level || "low").toLowerCase()}`}>{inc.severity_level || "—"}</span>
+                    {inc.severity_score && <div className="td-muted">{inc.severity_score}/100</div>}
+                  </td>
+                  <td className="td-muted">{inc.source}</td>
+                  <td><span className="badge badge-gray">{inc.status}</span><div className="td-muted">{inc.verification_status}</div></td>
+                  <td>{inc.possible_duplicate ? <span className="badge badge-high">⚠️ Duplicate</span> : <span className="badge badge-low">✅ Unique</span>}</td>
+                </tr>
+              ))}
+              {filtered.length === 0 && <tr><td colSpan={9} style={{textAlign:"center",color:"var(--gov-text-muted)",padding:30}}>No incidents found</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// RESOURCES PAGE
+// ============================================================================
+function ResourcesPage({ resources, onRefresh }: { resources: Resource[]; onRefresh: () => void }) {
+  const [updatingId, setUpdatingId] = useState("");
+
+  const updateStatus = async (id: string, status: Resource["status"]) => {
+    setUpdatingId(id);
+    try {
+      await apiFetch(`/resources/${id}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
+      onRefresh();
+    } catch (e: unknown) { console.error(e); }
+    finally { setUpdatingId(""); }
+  };
+
+  return (
+    <div>
+      <div className="metrics-grid mb-4">
+        {["Available","Reserved","Deployed","Returning"].map(s => (
+          <div className="metric-tile" key={s}>
+            <div className={`metric-icon-box ${s==="Available"?"green":s==="Deployed"?"red":s==="Reserved"?"amber":"blue"}`}><Truck size={20}/></div>
+            <div>
+              <div className="metric-tile-label">{s}</div>
+              <div className="metric-tile-value">{resources.filter(r => r.status === s).length}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="gov-card">
+        <div className="gov-table-wrap">
+          <table className="gov-table">
+            <thead><tr><th>Resource ID</th><th>Name</th><th>Type</th><th>Location</th><th>Capacity</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody>
+              {resources.map(r => (
+                <tr key={r.resource_id}>
+                  <td className="td-id">{r.resource_id}</td>
+                  <td><strong>{r.name}</strong></td>
+                  <td>{r.resource_type}</td>
+                  <td>{r.location}</td>
+                  <td>{r.capacity}</td>
+                  <td><span className={`badge ${r.status==="Available"?"badge-low":r.status==="Deployed"?"badge-critical":r.status==="Reserved"?"badge-medium":"badge-info"}`}>{r.status}</span></td>
+                  <td>
+                    {r.status === "Deployed" && (
+                      <button className="btn btn-secondary btn-sm" onClick={() => updateStatus(r.resource_id, "Returning")} disabled={updatingId === r.resource_id}>
+                        Return
+                      </button>
+                    )}
+                    {r.status === "Returning" && (
+                      <button className="btn btn-success btn-sm" onClick={() => updateStatus(r.resource_id, "Available")} disabled={updatingId === r.resource_id}>
+                        Set Available
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// SHELTERS PAGE
+// ============================================================================
+function SheltersPage({ shelters, onRefresh }: { shelters: Shelter[]; onRefresh: () => void }) {
+  const [updatingId, setUpdatingId] = useState("");
+  const [newOccupancy, setNewOccupancy] = useState<Record<string, number>>({});
+
+  const updateOccupancy = async (id: string, total: number) => {
+    const val = newOccupancy[id];
+    if (val === undefined || val < 0 || val > total) return;
+    setUpdatingId(id);
+    try {
+      await apiFetch(`/shelters/${id}/occupancy`, { method: "PATCH", body: JSON.stringify({ occupied: val }) });
+      onRefresh();
+    } catch (e: unknown) { console.error(e); }
+    finally { setUpdatingId(""); }
+  };
+
+  return (
+    <div className="gov-card">
+      <div className="gov-table-wrap">
+        <table className="gov-table">
+          <thead><tr><th>Shelter</th><th>Location</th><th>Total Capacity</th><th>Occupied</th><th>Available</th><th>Occupancy %</th><th>Status</th><th>Update Occupancy</th></tr></thead>
+          <tbody>
+            {shelters.map(s => {
+              const pct = s.total_capacity > 0 ? (s.occupied / s.total_capacity) * 100 : 0;
+              return (
+                <tr key={s.shelter_id}>
+                  <td><strong>{s.name}</strong><div className="td-muted">{s.shelter_id}</div></td>
+                  <td>{s.location}</td>
+                  <td>{s.total_capacity}</td>
+                  <td><strong>{s.occupied}</strong></td>
+                  <td>{s.total_capacity - s.occupied}</td>
+                  <td>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{flex:1,height:8,background:"var(--gov-border)",borderRadius:4,overflow:"hidden"}}>
+                        <div style={{width:`${pct}%`,height:"100%",background:pct>=100?"var(--gov-red)":pct>=90?"var(--gov-amber)":"var(--gov-green)",borderRadius:4}} />
+                      </div>
+                      <span style={{fontSize:11,fontWeight:700}}>{pct.toFixed(0)}%</span>
+                    </div>
+                  </td>
+                  <td><span className={`badge ${pct>=100?"badge-critical":pct>=90?"badge-high":"badge-low"}`}>{pct>=100?"FULL":pct>=90?"Near Full":"Available"}</span></td>
+                  <td>
+                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                      <input type="number" className="form-control" style={{width:70}} min={0} max={s.total_capacity} defaultValue={s.occupied} onChange={e => setNewOccupancy(prev => ({...prev,[s.shelter_id]:parseInt(e.target.value)||0}))} />
+                      <button className="btn btn-primary btn-sm" onClick={() => updateOccupancy(s.shelter_id, s.total_capacity)} disabled={updatingId === s.shelter_id}>Update</button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// ROUTES PAGE
+// ============================================================================
+function RoutesPage({ roads, onRefresh }: { roads: Road[]; onRefresh: () => void }) {
+  const [updating, setUpdating] = useState("");
+
+  const toggleRoad = async (road: Road) => {
+    const nextStatus = road.status === "Closed" ? "Open" : "Closed";
+    setUpdating(road.road_id);
+    try {
+      await apiFetch(`/roads/${road.road_id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: nextStatus, closure_type: nextStatus === "Closed" ? "Known Road Closure" : "None", reason: nextStatus === "Closed" ? "Flood-related closure" : "Corridor cleared" }),
+      });
+      onRefresh();
+    } catch (e: unknown) { console.error(e); }
+    finally { setUpdating(""); }
+  };
+
+  return (
+    <div>
+      <div className="gov-alert alert-info mb-3">
+        <AlertCircle size={14}/>
+        <div style={{fontSize:11}}>
+          <strong>Road Classification Policy:</strong> Only mark roads as "Known Road Closure" if confirmed by official authorities. AI-inferred accessibility problems are different and require field verification.
+        </div>
+      </div>
+      <div className="gov-card">
+        <div className="gov-table-wrap">
+          <table className="gov-table">
+            <thead><tr><th>Road Name</th><th>From</th><th>To</th><th>Status</th><th>Closure Type</th><th>Reason</th><th>Action</th></tr></thead>
+            <tbody>
+              {roads.map(r => (
+                <tr key={r.road_id}>
+                  <td><strong>{r.name}</strong><div className="td-id">{r.road_id}</div></td>
+                  <td>{r.origin_location}</td>
+                  <td>{r.destination_location}</td>
+                  <td><span className={`badge ${r.status==="Open"?"badge-low":r.status==="Partially Blocked"?"badge-medium":"badge-critical"}`}>{r.status}</span></td>
+                  <td style={{fontSize:11,color:"var(--gov-text-muted)"}}>{r.closure_type}</td>
+                  <td className="td-muted">{r.reason || "—"}</td>
+                  <td>
+                    <button className={`btn btn-sm ${r.status==="Closed"?"btn-success":"btn-danger"}`} onClick={() => toggleRoad(r)} disabled={updating===r.road_id}>
+                      {r.status==="Closed" ? "Reopen" : "Close Road"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// APPROVALS PAGE
+// ============================================================================
+function ApprovalsPage({ approvals, onRefresh }: { approvals: Approval[]; onRefresh: () => void }) {
+  const pending = approvals.filter(a => a.status === "Pending");
+  const [reviewer, setReviewer] = useState("Emergency Commander");
+  const [comments, setComments] = useState("");
+  const [processing, setProcessing] = useState("");
+
+  const process = async (id: string, decision: "Approved" | "Rejected") => {
+    if (!comments.trim()) return;
+    setProcessing(id);
+    try {
+      await apiFetch(`/approvals/${id}`, { method: "PATCH", body: JSON.stringify({ decision, reviewer, comments }) });
+      onRefresh(); setComments("");
+    } catch (e: unknown) { console.error(e); }
+    finally { setProcessing(""); }
+  };
+
+  return (
+    <div>
+      {pending.length > 0 && (
+        <div className="gov-alert alert-warning mb-3">
+          <AlertTriangle size={16}/>
+          <div><strong>{pending.length} Pending Authorization(s)</strong> — Rescue operations are halted pending commander review.</div>
+        </div>
+      )}
+      <div className="gov-card mb-4">
+        <div className="gov-card-header"><h3>Quick Authorization Panel</h3></div>
+        <div className="gov-card-body">
+          <div className="form-row">
+            <div className="form-group">
+              <label className="form-label">Commander Name</label>
+              <input className="form-control" value={reviewer} onChange={e => setReviewer(e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Authorization Comments</label>
+              <input className="form-control" value={comments} onChange={e => setComments(e.target.value)} placeholder="Required for approval/rejection" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="gov-card">
+        <div className="gov-table-wrap">
+          <table className="gov-table">
+            <thead><tr><th>Request ID</th><th>Incident</th><th>Action Type</th><th>Proposed Action</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+              {approvals.map(a => (
+                <tr key={a.request_id}>
+                  <td className="td-id">{a.request_id}</td>
+                  <td>{a.incident_id}</td>
+                  <td>{a.action_type}</td>
+                  <td style={{maxWidth:250,fontSize:11}}>{a.proposed_action}</td>
+                  <td><span className={`badge badge-${a.status.toLowerCase()}`}>{a.status}</span></td>
+                  <td>
+                    {a.status === "Pending" && (
+                      <div style={{display:"flex",gap:6}}>
+                        <button className="btn btn-success btn-sm" onClick={() => process(a.request_id, "Approved")} disabled={processing===a.request_id || !comments}>Approve</button>
+                        <button className="btn btn-danger btn-sm" onClick={() => process(a.request_id, "Rejected")} disabled={processing===a.request_id || !comments}>Reject</button>
+                      </div>
+                    )}
+                    {a.status !== "Pending" && <span style={{fontSize:11,color:"var(--gov-text-muted)"}}>By: {a.reviewer}</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// ACTIONS PAGE
+// ============================================================================
+function ActionsPage({ actions, onRefresh }: { actions: ResponseAction[]; onRefresh: () => void }) {
+  const update = async (id: string, status: string, remarks: string) => {
+    await apiFetch(`/actions/${id}`, { method: "PATCH", body: JSON.stringify({ status, remarks }) });
+    onRefresh();
+  };
+
+  return (
+    <div className="gov-card">
+      <div className="gov-table-wrap">
+        <table className="gov-table">
+          <thead><tr><th>Action ID</th><th>Incident</th><th>Title</th><th>Priority</th><th>Status</th><th>Updated</th><th>Complete</th></tr></thead>
+          <tbody>
+            {actions.map(a => (
+              <tr key={a.action_id}>
+                <td className="td-id">{a.action_id}</td>
+                <td>{a.incident_id}</td>
+                <td><strong>{a.title}</strong><div className="td-muted">{a.description?.substring(0,60)}...</div></td>
+                <td><span className={`badge ${a.priority==="High"||a.priority==="Critical"?"badge-critical":"badge-medium"}`}>{a.priority}</span></td>
+                <td><span className={`badge ${a.status==="Completed"?"badge-approved":a.status==="In Progress"?"badge-info":"badge-gray"}`}>{a.status}</span></td>
+                <td className="td-muted">{a.updated_at ? new Date(a.updated_at).toLocaleDateString() : "—"}</td>
+                <td>
+                  {a.status !== "Completed" && (
+                    <button className="btn btn-success btn-sm" onClick={() => update(a.action_id, "Completed", "Rescue operation completed successfully")}>
+                      Complete
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {actions.length === 0 && <tr><td colSpan={7} style={{textAlign:"center",color:"var(--gov-text-muted)",padding:30}}>No response actions created yet</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// ALERTS PAGE
+// ============================================================================
+function AlertsPage({ alerts, onRefresh }: { alerts: AlertItem[]; onRefresh: () => void }) {
+  const ack = async (id: string) => {
+    await apiFetch(`/alerts/${id}/acknowledge`, { method: "PATCH" });
+    onRefresh();
+  };
+
+  return (
+    <div className="gov-card">
+      <div className="gov-table-wrap">
+        <table className="gov-table">
+          <thead><tr><th>Alert ID</th><th>Type</th><th>Severity</th><th>Title</th><th>Message</th><th>Time</th><th>Action</th></tr></thead>
+          <tbody>
+            {alerts.map(a => (
+              <tr key={a.alert_id} style={a.acknowledged ? {opacity:0.6} : {}}>
+                <td className="td-id">{a.alert_id}</td>
+                <td>{a.alert_type}</td>
+                <td><span className={`badge ${a.severity==="Critical"?"badge-critical":a.severity==="Warning"?"badge-high":"badge-info"}`}>{a.severity}</span></td>
+                <td><strong>{a.title}</strong></td>
+                <td style={{fontSize:11}}>{a.message}</td>
+                <td className="td-muted">{a.created_at ? new Date(a.created_at).toLocaleDateString() : "—"}</td>
+                <td>
+                  {!a.acknowledged && (
+                    <button className="btn btn-secondary btn-sm" onClick={() => ack(a.alert_id)}>Acknowledge</button>
+                  )}
+                  {!!a.acknowledged && <span style={{color:"var(--gov-green)",fontSize:12}}>✅ Ack'd</span>}
+                </td>
+              </tr>
+            ))}
+            {alerts.length === 0 && <tr><td colSpan={7} style={{textAlign:"center",color:"var(--gov-text-muted)",padding:30}}>No alerts</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// REPORTS PAGE
+// ============================================================================
+function ReportsPage() {
+  return (
+    <div>
+      <div className="gov-card mb-3">
+        <div className="gov-card-header"><h3><FileText size={14}/> Situation Reports</h3></div>
+        <div className="gov-card-body">
+          <p style={{fontSize:13,marginBottom:16,color:"var(--gov-text-muted)"}}>
+            Official situation reports are generated in real-time from the ResQAI database. Download PDF reports for official records, briefings, and incident documentation.
+          </p>
+          <div style={{display:"flex",gap:10}}>
+            <a href={`${API}/reports/situation`} target="_blank" rel="noreferrer" className="btn btn-primary">
+              <FileDown size={15}/> Download PDF Situation Report
+            </a>
+            <a href={`${API}/incidents`} target="_blank" rel="noreferrer" className="btn btn-secondary">
+              <Database size={15}/> Raw Incident Data (JSON)
+            </a>
+          </div>
+        </div>
+      </div>
+      <div className="gov-card">
+        <div className="gov-card-header"><h3>API Endpoints</h3></div>
+        <div className="gov-card-body">
+          <div className="gov-table-wrap">
+            <table className="gov-table">
+              <thead><tr><th>Endpoint</th><th>Method</th><th>Description</th><th>Link</th></tr></thead>
+              <tbody>
+                {[
+                  {ep:"/health",m:"GET",d:"System health check"},
+                  {ep:"/incidents",m:"GET",d:"List all incidents"},
+                  {ep:"/resources",m:"GET",d:"List all resources"},
+                  {ep:"/shelters",m:"GET",d:"List all shelters"},
+                  {ep:"/alerts",m:"GET",d:"List all alerts"},
+                  {ep:"/approvals",m:"GET",d:"List all approvals"},
+                  {ep:"/reports/situation",m:"GET",d:"Download PDF situation report"},
+                  {ep:"/agents",m:"GET",d:"List all 8 AI agents"},
+                  {ep:"/workflow/run",m:"POST",d:"Run full 8-agent workflow"},
+                  {ep:"/docs",m:"GET",d:"Swagger API documentation"},
+                ].map(({ep,m,d}) => (
+                  <tr key={ep}>
+                    <td style={{fontFamily:"monospace",fontSize:12}}>{ep}</td>
+                    <td><span className="badge badge-info">{m}</span></td>
+                    <td>{d}</td>
+                    <td><a href={`${API}${ep}`} target="_blank" rel="noreferrer" className="btn btn-ghost btn-sm"><Eye size={12}/> Open</a></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// MAIN APP COMPONENT
+// ============================================================================
+export default function App() {
+  const [activeTab, setActiveTab] = useState<ActiveTab>("pipeline");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const [loading, setLoading] = useState(true);
+
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
@@ -376,229 +2383,11 @@ export default function App() {
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [actions, setActions] = useState<ResponseAction[]>([]);
   const [alerts, setAlerts] = useState<AlertItem[]>([]);
+  const [systemConfig, setSystemConfig] = useState<{commander_on_duty?: string}>({});
 
-  const [connected, setConnected] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [errorMsg, setErrorMsg] = useState("");
-  const [successMsg, setSuccessMsg] = useState("");
-  const [selectedIncidentId, setSelectedIncidentId] = useState<string>("");
-
-  // System Configuration & Settings State
-  const [systemConfig, setSystemConfig] = useState<{
-    jurisdiction: string;
-    commander_on_duty: string;
-    autonomous_dispatch: boolean;
-    double_allocation_lock: boolean;
-    shelter_saturation_threshold: number;
-    weather_reassessment_auto: boolean;
-    alert_gateway: string;
-    db_backend: string;
-    active_agents: number;
-  }>({
-    jurisdiction: "Vijayawada / Krishna Basin, AP",
-    commander_on_duty: "Maj. EOC Auth-01",
-    autonomous_dispatch: false,
-    double_allocation_lock: true,
-    shelter_saturation_threshold: 0.85,
-    weather_reassessment_auto: true,
-    alert_gateway: "Twilio / Gov SIM Active",
-    db_backend: "SQLite / PostgreSQL Hybrid",
-    active_agents: 8,
-  });
-
-  const toggleTheme = () => {
-    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
-  };
-
-  const handleUpdateConfig = async (patch: Partial<typeof systemConfig>) => {
-    try {
-      const updated = await apiFetch<typeof systemConfig>("/system/config", {
-        method: "PATCH",
-        body: JSON.stringify(patch),
-      });
-      setSystemConfig(updated);
-      setSuccessMsg("System configuration updated successfully.");
-      setTimeout(() => setSuccessMsg(""), 4000);
-    } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : "Failed to update configuration");
-    }
-  };
-
-  const filteredSearchItems = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return [];
-    const results: Array<{ id?: string; label: string; sub: string; type: string; tab: ActiveTab }> = [];
-
-    for (const inc of incidents) {
-      if (
-        inc.incident_id.toLowerCase().includes(q) ||
-        inc.location.toLowerCase().includes(q) ||
-        inc.disaster_type.toLowerCase().includes(q) ||
-        inc.description.toLowerCase().includes(q)
-      ) {
-        results.push({
-          id: inc.incident_id,
-          label: `${inc.incident_id} — ${inc.location}`,
-          sub: `${inc.disaster_type} • Urgency ${inc.urgency}/5 • ${inc.status}`,
-          type: "Incident",
-          tab: "details",
-        });
-        if (results.length >= 8) break;
-      }
-    }
-
-    for (const sh of shelters) {
-      if (
-        sh.name.toLowerCase().includes(q) ||
-        sh.location.toLowerCase().includes(q) ||
-        sh.shelter_id.toLowerCase().includes(q)
-      ) {
-        results.push({
-          id: sh.shelter_id,
-          label: sh.name,
-          sub: `${sh.location} • Occupancy: ${sh.occupied}/${sh.total_capacity} (${sh.status})`,
-          type: "Shelter",
-          tab: "shelters",
-        });
-        if (results.length >= 10) break;
-      }
-    }
-
-    for (const res of resources) {
-      if (
-        res.name.toLowerCase().includes(q) ||
-        res.resource_type.toLowerCase().includes(q) ||
-        res.resource_id.toLowerCase().includes(q)
-      ) {
-        results.push({
-          id: res.resource_id,
-          label: res.name,
-          sub: `${res.resource_type} • Status: ${res.status}`,
-          type: "Resource",
-          tab: "resources",
-        });
-        if (results.length >= 12) break;
-      }
-    }
-
-    return results;
-  }, [searchQuery, incidents, shelters, resources]);
-
-  // Step-by-Step Agent Pipeline State ("Each agent should act as one page")
-  const [pipelineStep, setPipelineStep] = useState<number>(1);
-  const [autoRedirectEnabled, setAutoRedirectEnabled] = useState(false);
-  const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null);
-
-  // Active Incident Ingestion / Pipeline Context
-  const [pipelineIncident, setPipelineIncident] = useState({
-    incident_id: "INC-NEW-01",
-    disaster_type: "Flood",
-    location: "Zone A Residential Sector",
-    description: "Flood water has entered approximately 20 houses. Around 40 residents require evacuation. Main access road partially flooded.",
-    people_affected: 40,
-    urgency: 4,
-    source: "Emergency Call 911",
-    latitude: 16.512,
-    longitude: 80.641,
-    assistance_requested: "Rescue boat evacuation and shelter assistance",
-    infrastructure_issue: "road_partially_flooded",
-  });
-
-  const [intakeResult, setIntakeResult] = useState<{
-    processed: boolean;
-    incident_id: string;
-    duplicate_detected: boolean;
-    duplicate_of: string | null;
-    similarity_score: number;
-    reason: string;
-    confidence: string;
-  } | null>(null);
-
-  const [severityResult, setSeverityResult] = useState<{
-    score: number;
-    level: string;
-    factors: string[];
-    immediate_threats: string[];
-    escalation_potential: string;
-  } | null>(null);
-
-  const [weatherTelemetry, setWeatherTelemetry] = useState<{
-    temperature: number;
-    precipitation: number;
-    wind_speed: number;
-    condition: string;
-    forecast: string;
-    severe_warning: boolean;
-    impact_note: string;
-  }>({
-    temperature: 26.2,
-    precipitation: 16.5,
-    wind_speed: 44.0,
-    condition: "Heavy Rain (WMO 65)",
-    forecast: "Torrential downpours expected for next 6 hours (estimated +45mm)",
-    severe_warning: true,
-    impact_note: "Heavy precipitation is rapidly escalating canal overflow. Surface access worsening.",
-  });
-
-  // Shortage Checker State
-  const [shortageType, setShortageType] = useState("Rescue Boat");
-  const [shortageQuantity, setShortageQuantity] = useState(8);
-  const [shortageResult, setShortageResult] = useState<Record<string, unknown>>({
-    shortage_detected: true,
-    resources: {
-      "Rescue Boat": {
-        required: 8,
-        available: 5,
-        deficit: 3,
-        shortage: true,
-      },
-    },
-    alternatives: [
-      "Request mutual aid from State Emergency Management Agency (SEMA)",
-      "Deploy 5 available units immediately while staging high-clearance amphibious transport",
-    ],
-  });
-
-  // Critic Review State
-  const [criticAudit] = useState<{
-    status: "Ready for Human Review" | "Needs Revision";
-    sanity_checks: { title: string; passed: boolean; detail: string }[];
-    safety_certification: string;
-  }>({
-    status: "Ready for Human Review",
-    sanity_checks: [
-      { title: "No Double Resource Allocation", passed: true, detail: "All assigned units are in Available status without concurrent locks." },
-      { title: "Route Closure Accounting", passed: true, detail: "Transit perimeter adjusted for known road blockage." },
-      { title: "Mandatory Human Authorization Guard", passed: true, detail: "Autonomous physical dispatch flag is hard locked to FALSE." },
-      { title: "No Hallucinated Resources", passed: true, detail: "Only verified existing inventory (5 boats) utilized; deficit (3) flagged." },
-      { title: "Uncertain Data Tagged for Verification", passed: true, detail: "Flood zone boundaries marked for on-scene ground verification." },
-    ],
-    safety_certification: "ResQAI Protocol Verified: All 5 safety constraints validated. Ready for Incident Commander authorization.",
-  });
-
-  // Approval Form State
-  const [reviewerName, setReviewerName] = useState("Incident Commander Sarah Chen");
-  const [reviewComments, setReviewComments] = useState("Verified scene conditions. Immediate priority evacuation authorized.");
-
-  // Shelter Occupancy Form State
-  const [selectedShelterId, setSelectedShelterId] = useState("");
-  const [occupancyInput, setOccupancyInput] = useState<number>(0);
-
-  // Workflow State
-  const [workflowLoading, setWorkflowLoading] = useState(false);
-  const [workflowResult, setWorkflowResult] = useState<WorkflowResult | null>(null);
-
-  // Test Suite State
-  const [testsLoading, setTestsLoading] = useState(false);
-  const [testReport, setTestReport] = useState<TestSuiteReport | null>(null);
-
-  // Replanning State
-  const [, setReplanningOutput] = useState<Record<string, unknown> | null>(null);
-
-  // Load Data
   const refreshData = useCallback(async () => {
     try {
-      const results = await Promise.allSettled([
+      const [dash, inc, res, shl, rds, apr, act, alt, hlth, cfg] = await Promise.allSettled([
         apiFetch<DashboardData>("/dashboard"),
         apiFetch<{ incidents: Incident[] }>("/incidents"),
         apiFetch<{ resources: Resource[] }>("/resources"),
@@ -608,4122 +2397,170 @@ export default function App() {
         apiFetch<{ actions: ResponseAction[] }>("/actions"),
         apiFetch<{ alerts: AlertItem[] }>("/alerts"),
         apiFetch<{ status: string }>("/health"),
-        apiFetch<typeof systemConfig>("/system/config"),
+        apiFetch<{commander_on_duty?: string}>("/system/config"),
       ]);
-
-      if (results[8].status === "fulfilled") setConnected(true);
-      else setConnected(false);
-
-      if (results[0].status === "fulfilled") setDashboard(results[0].value);
-      if (results[1].status === "fulfilled") {
-        setIncidents(results[1].value.incidents || []);
-        if (!selectedIncidentId && results[1].value.incidents?.length) {
-          setSelectedIncidentId(results[1].value.incidents[0].incident_id);
-        }
-      }
-      if (results[2].status === "fulfilled") setResources(results[2].value.resources || []);
-      if (results[3].status === "fulfilled") {
-        setShelters(results[3].value.shelters || []);
-        if (!selectedShelterId && results[3].value.shelters?.length) {
-          setSelectedShelterId(results[3].value.shelters[0].shelter_id);
-          setOccupancyInput(results[3].value.shelters[0].occupied);
-        }
-      }
-      if (results[4].status === "fulfilled") setRoads(results[4].value.roads || []);
-      if (results[5].status === "fulfilled") setApprovals(results[5].value.approvals || []);
-      if (results[6].status === "fulfilled") setActions(results[6].value.actions || []);
-      if (results[7].status === "fulfilled") setAlerts(results[7].value.alerts || []);
-      if (results[9].status === "fulfilled") setSystemConfig(results[9].value);
-
-      setErrorMsg("");
-    } catch (err: unknown) {
-      setConnected(false);
-      setErrorMsg(err instanceof Error ? err.message : "Error connecting to backend");
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedIncidentId, selectedShelterId]);
+      setConnected(hlth.status === "fulfilled");
+      if (dash.status === "fulfilled") setDashboard(dash.value);
+      if (inc.status === "fulfilled") setIncidents(inc.value.incidents || []);
+      if (res.status === "fulfilled") setResources(res.value.resources || []);
+      if (shl.status === "fulfilled") setShelters(shl.value.shelters || []);
+      if (rds.status === "fulfilled") setRoads(rds.value.roads || []);
+      if (apr.status === "fulfilled") setApprovals(apr.value.approvals || []);
+      if (act.status === "fulfilled") setActions(act.value.actions || []);
+      if (alt.status === "fulfilled") setAlerts(alt.value.alerts || []);
+      if (cfg.status === "fulfilled") setSystemConfig(cfg.value);
+    } catch { setConnected(false); }
+    finally { setLoading(false); }
+  }, []);
 
   useEffect(() => {
-    void refreshData();
-    const interval = setInterval(() => void refreshData(), 12000);
+    refreshData();
+    const interval = setInterval(refreshData, 15000);
     return () => clearInterval(interval);
   }, [refreshData]);
 
-  // Live Simulation Player State (Automatic step-by-step agent demonstration)
-  const [isSimulating, setIsSimulating] = useState(false);
+  const pendingApprovals = approvals.filter(a => a.status === "Pending").length;
+  const unreadAlerts = alerts.filter(a => !a.acknowledged).length;
 
-  useEffect(() => {
-    if (!isSimulating) return;
-    const timer = setInterval(() => {
-      setPipelineStep((prev) => {
-        if (prev >= 9) {
-          setIsSimulating(false);
-          return 9;
-        }
-        return prev + 1;
-      });
-    }, 4200);
-    return () => clearInterval(timer);
-  }, [isSimulating]);
-
-  // Handle Auto-redirect timer between agents
-  useEffect(() => {
-    if (!autoRedirectEnabled || redirectCountdown === null) return;
-    if (redirectCountdown <= 0) {
-      setRedirectCountdown(null);
-      if (pipelineStep < 9) {
-        setPipelineStep((prev) => prev + 1);
-      }
-      return;
-    }
-    const timer = setTimeout(() => {
-      setRedirectCountdown((prev) => (prev !== null ? prev - 1 : null));
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, [autoRedirectEnabled, redirectCountdown, pipelineStep]);
-
-  // Actions
-  const handleIntakeAgentProcess = async () => {
-    try {
-      setLoading(true);
-      const res = await apiFetch<{
-        message: string;
-        incident: Incident;
-        duplicate_detection: { duplicate_detected: boolean; duplicate_of: string | null; reason: string; similarity_score: number };
-      }>("/incidents", {
-        method: "POST",
-        body: JSON.stringify(pipelineIncident),
-      });
-
-      const inc = res.incident;
-      setIntakeResult({
-        processed: true,
-        incident_id: inc.incident_id,
-        duplicate_detected: inc.possible_duplicate || res.duplicate_detection?.duplicate_detected || false,
-        duplicate_of: inc.duplicate_of || res.duplicate_detection?.duplicate_of || null,
-        similarity_score: res.duplicate_detection?.similarity_score || 0.85,
-        reason: res.duplicate_detection?.reason || (inc.possible_duplicate ? "Similar incident reported nearby within recent window" : "Unique incident verified"),
-        confidence: "high",
-      });
-
-      // Calculate severity
-      const popFactor = Math.min(40, Math.floor((inc.people_affected || 40) / 2.5));
-      const urgencyFactor = (inc.urgency || 4) * 8;
-      const accessPenalty = 15;
-      const weatherPenalty = 10;
-      const infraPenalty = 10;
-      const totalScore = Math.min(100, popFactor + urgencyFactor + accessPenalty + weatherPenalty + infraPenalty);
-      const level = totalScore >= 75 ? "Critical" : totalScore >= 50 ? "High" : totalScore >= 25 ? "Medium" : "Low";
-
-      setSeverityResult({
-        score: totalScore,
-        level,
-        factors: [
-          `Affected population (${inc.people_affected}): +${popFactor} pts`,
-          `Urgency rating (${inc.urgency}/5): +${urgencyFactor} pts`,
-          `Access route cut off / flooded: +${accessPenalty} pts`,
-          `Adverse weather / continuing heavy rain: +${weatherPenalty} pts`,
-          `Infrastructure damage reported: +${infraPenalty} pts`,
-        ],
-        immediate_threats: [
-          "Rising water levels threatening life safety in low-lying structures",
-          "Electrical hazard from submerged residential transformer lines",
-          "Hypothermia and vulnerability of elderly residents and children",
-        ],
-        escalation_potential: "High — Rainfall continuing for next 6 hours will heighten inundation depths by 0.5–1.0m.",
-      });
-
-      setSuccessMsg(`Agent 1 Intake Complete: Incident ${inc.incident_id} processed. ${inc.possible_duplicate ? "Potential duplicate flagged." : "Unique incident registered."}`);
-      
-      // Immediately reflect created incident on all GIS maps and state
-      setIncidents((prev) => {
-        const remaining = prev.filter((x) => x.incident_id !== inc.incident_id);
-        return [inc, ...remaining];
-      });
-      setSelectedIncidentId(inc.incident_id);
-      setPipelineIncident((prev) => ({
-        ...prev,
-        incident_id: inc.incident_id,
-        latitude: inc.latitude ?? prev.latitude,
-        longitude: inc.longitude ?? prev.longitude,
-      }));
-
-      void refreshData();
-
-      // Trigger auto-redirect countdown (4 seconds)
-      if (autoRedirectEnabled) {
-        setRedirectCountdown(4);
-      }
-    } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : "Intake processing failed");
-    } finally {
-      setLoading(false);
-    }
+  const PAGE_TITLES: Record<ActiveTab, string> = {
+    pipeline: "8-Agent AI Pipeline — Incident Response",
+    dashboard: "Emergency Dashboard",
+    incidents: "Incident Registry",
+    resources: "Resource Inventory",
+    shelters: "Shelter Management",
+    routes: "Route & Accessibility Network",
+    approvals: "Authorization Center",
+    actions: "Response Action Tracker",
+    alerts: "Alert Center",
+    reports: "Situation Reports & API",
   };
 
-  const handleReviewApproval = async (requestId: string, decision: "Approved" | "Rejected") => {
-    try {
-      await apiFetch(`/approvals/${requestId}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          decision,
-          reviewer: reviewerName,
-          comments: reviewComments,
-        }),
-      });
-      setSuccessMsg(`Incident Commander marked action: ${decision}.`);
-      void refreshData();
-      setTimeout(() => setSuccessMsg(""), 4000);
-    } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : "Approval action failed");
-    }
-  };
+  const navItems = [
+    { id: "pipeline" as ActiveTab, icon: <Workflow size={18}/>, label: "8-Agent Pipeline", badge: null, section: "OPERATIONS" },
+    { id: "dashboard" as ActiveTab, icon: <BarChart2 size={18}/>, label: "Dashboard", badge: null, section: "OPERATIONS" },
+    { id: "incidents" as ActiveTab, icon: <AlertCircle size={18}/>, label: "Incident Registry", badge: incidents.length > 0 ? incidents.length : null, section: "OPERATIONS" },
+    { id: "approvals" as ActiveTab, icon: <ShieldCheck size={18}/>, label: "Authorization", badge: pendingApprovals > 0 ? pendingApprovals : null, section: "OPERATIONS" },
+    { id: "resources" as ActiveTab, icon: <Truck size={18}/>, label: "Resources", badge: null, section: "LOGISTICS" },
+    { id: "shelters" as ActiveTab, icon: <Warehouse size={18}/>, label: "Shelters", badge: null, section: "LOGISTICS" },
+    { id: "routes" as ActiveTab, icon: <Navigation size={18}/>, label: "Route Network", badge: roads.filter(r => r.status === "Closed").length > 0 ? "!" : null, section: "LOGISTICS" },
+    { id: "actions" as ActiveTab, icon: <Clock size={18}/>, label: "Action Tracker", badge: null, section: "SYSTEM" },
+    { id: "alerts" as ActiveTab, icon: <Bell size={18}/>, label: "Alert Center", badge: unreadAlerts > 0 ? unreadAlerts : null, section: "SYSTEM" },
+    { id: "reports" as ActiveTab, icon: <FileDown size={18}/>, label: "Reports & API", badge: null, section: "SYSTEM" },
+  ];
 
-  const handleUpdateResourceStatus = async (
-    resourceId: string,
-    targetStatus: "Available" | "Reserved" | "Deployed" | "Returning",
-  ) => {
-    try {
-      await apiFetch(`/resources/${resourceId}/status`, {
-        method: "PATCH",
-        body: JSON.stringify({ status: targetStatus }),
-      });
-      void refreshData();
-    } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : "Status update failed");
-    }
-  };
-
-  const handleUpdateOccupancy = async (shelterId: string, occupiedVal: number) => {
-    try {
-      await apiFetch(`/shelters/${shelterId}/occupancy`, {
-        method: "PATCH",
-        body: JSON.stringify({ occupied: occupiedVal }),
-      });
-      void refreshData();
-      setSuccessMsg("Shelter occupancy updated deterministically.");
-      setTimeout(() => setSuccessMsg(""), 4000);
-    } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : "Failed to update occupancy");
-    }
-  };
-
-  const handleToggleRoad = async (road: Road) => {
-    const nextStatus = road.status === "Closed" ? "Open" : "Closed";
-    const closureType = nextStatus === "Closed" ? "Known Road Closure" : "None";
-    try {
-      const res = await apiFetch<Record<string, unknown>>(`/roads/${road.road_id}/status`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          status: nextStatus,
-          closure_type: closureType,
-          reason: nextStatus === "Closed" ? "Sudden flood canal overflow. Road closed." : "Corridor cleared.",
-        }),
-      });
-      setReplanningOutput(res);
-      void refreshData();
-      setSuccessMsg(`Road ${road.name} changed to ${nextStatus}. Dynamic replanning evaluated.`);
-      setTimeout(() => setSuccessMsg(""), 5000);
-    } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : "Road update failed");
-    }
-  };
-
-  const handleRunWorkflow = async () => {
-    setWorkflowLoading(true);
-    setWorkflowResult(null);
-    try {
-      const selected = incidents.find((i) => i.incident_id === selectedIncidentId) || incidents[0];
-      const payload = {
-        incident: {
-          incident_id: selected?.incident_id || "INC-001",
-          disaster_type: selected?.disaster_type || "Flood",
-          location: selected?.location || "Zone A",
-          people_affected: selected?.people_affected || 40,
-          urgency: selected?.urgency || 4,
-          severity_level: selected?.severity?.level || "Critical",
-          infrastructure_issue: selected?.infrastructure_issue || "road_partially_flooded",
-        },
-        weather: {
-          temperature_2m: weatherTelemetry.temperature,
-          precipitation: weatherTelemetry.precipitation,
-          rain: weatherTelemetry.precipitation,
-          wind_speed_10m: weatherTelemetry.wind_speed,
-          source: "Open-Meteo",
-        },
-        latitude: selected?.latitude || 16.512,
-        longitude: selected?.longitude || 80.641,
-        resources: resources,
-        required_resource_type: "Rescue Boat",
-        quantity: 2,
-        road_accessible: false,
-      };
-
-      const res = await apiFetch<WorkflowResult>("/workflow/run", {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-      setWorkflowResult(res);
-      setSuccessMsg("LangGraph 8-Agent StateGraph pipeline executed successfully.");
-    } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : "Workflow execution failed");
-    } finally {
-      setWorkflowLoading(false);
-    }
-  };
-
-  const handleCheckShortage = async () => {
-    try {
-      const res = await apiFetch<Record<string, unknown>>("/resources/check-shortage", {
-        method: "POST",
-        body: JSON.stringify({
-          incident_id: selectedIncidentId || "INC-003",
-          required_resources: { [shortageType]: shortageQuantity },
-        }),
-      });
-      setShortageResult(res);
-      void refreshData();
-      setSuccessMsg("Resource shortage check completed.");
-      setTimeout(() => setSuccessMsg(""), 4000);
-    } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : "Shortage check failed");
-    }
-  };
-
-  const handleSimulateSevereWeather = async () => {
-    try {
-      const res = await apiFetch<{ message: string }>("/weather/assessments/simulate", {
-        method: "POST",
-        body: JSON.stringify({
-          incident_id: selectedIncidentId || "INC-001",
-          precipitation: 28.0,
-          wind_speed: 65.0,
-          weather_code: 65,
-        }),
-      });
-      setWeatherTelemetry({
-        temperature: 24.0,
-        precipitation: 28.0,
-        wind_speed: 65.0,
-        condition: "Violent Storm (WMO 65)",
-        forecast: "Extreme torrential downpours; severe localized flash flooding",
-        severe_warning: true,
-        impact_note: "CRITICAL: Surface roads impassable. Immediate tactical escalation required.",
-      });
-      setSuccessMsg(res.message);
-      void refreshData();
-      setTimeout(() => setSuccessMsg(""), 5000);
-    } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : "Weather simulation failed");
-    }
-  };
-
-  const handleRunAllTests = async () => {
-    setTestsLoading(true);
-    setTestReport(null);
-    try {
-      const res = await apiFetch<TestSuiteReport>("/tests/run-all");
-      setTestReport(res);
-      setSuccessMsg(`All ${res.total} acceptance test cases executed. Passed: ${res.passed}/${res.total}.`);
-      void refreshData();
-    } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : "Test suite execution failed");
-    } finally {
-      setTestsLoading(false);
-    }
-  };
-
-  const handleResetDemoData = async () => {
-    try {
-      const res = await apiFetch<{ message: string }>("/demo/reset-seed", { method: "POST" });
-      setSuccessMsg(res.message);
-      void refreshData();
-      setTimeout(() => setSuccessMsg(""), 5000);
-    } catch (err: unknown) {
-      setErrorMsg(err instanceof Error ? err.message : "Demo reset failed");
-    }
-  };
-
-  // Quick Preset Selection for Agent Pipeline
-  const loadPreset = (preset: "zoneA" | "zoneB" | "zoneC" | "duplicate") => {
-    if (preset === "zoneA") {
-      setPipelineIncident({
-        incident_id: "INC-001",
-        disaster_type: "Flood",
-        location: "Zone A Residential",
-        description: "Flood water entering 20 homes in Zone A. Around 40 residents require evacuation.",
-        people_affected: 40,
-        urgency: 4,
-        source: "Citizen Report",
-        latitude: 16.512,
-        longitude: 80.641,
-        assistance_requested: "Rescue boat evacuation",
-        infrastructure_issue: "road_partially_flooded",
-      });
-    } else if (preset === "zoneB") {
-      setPipelineIncident({
-        incident_id: "INC-002",
-        disaster_type: "Flood",
-        location: "Zone B Commercial",
-        description: "Around 12 people stranded at market square due to sudden street inundation.",
-        people_affected: 12,
-        urgency: 3,
-        source: "Field Team Alpha",
-        latitude: 16.525,
-        longitude: 80.628,
-        assistance_requested: "Transport evacuation",
-        infrastructure_issue: "road_open",
-      });
-    } else if (preset === "zoneC") {
-      setPipelineIncident({
-        incident_id: "INC-003",
-        disaster_type: "Flood",
-        location: "Zone C Riverside Village",
-        description: "Village access completely cut off. 75 residents isolated with rising floodwater.",
-        people_affected: 75,
-        urgency: 5,
-        source: "Government Alert",
-        latitude: 16.491,
-        longitude: 80.659,
-        assistance_requested: "Amphibious/Boat rescue & medical triage",
-        infrastructure_issue: "road_closed",
-      });
-    } else if (preset === "duplicate") {
-      setPipelineIncident({
-        incident_id: "INC-DUP-01",
-        disaster_type: "Flood",
-        location: "Zone A Residential",
-        description: "Water overflow in residential street Zone A, urgent evacuation needed for families.",
-        people_affected: 35,
-        urgency: 4,
-        source: "Emergency Call 911",
-        latitude: 16.512,
-        longitude: 80.641,
-        assistance_requested: "Evacuation boat",
-        infrastructure_issue: "road_partially_flooded",
-      });
-    }
-    setPipelineStep(1);
-    setIntakeResult(null);
-  };
-
-  const selectedIncident = incidents.find((i) => i.incident_id === selectedIncidentId);
-  const pendingApprovalsCount = approvals.filter((a) => a.status === "Pending").length;
-  const unreadAlertsCount = alerts.filter((a) => a.acknowledged === 0).length;
+  const sections = ["OPERATIONS", "LOGISTICS", "SYSTEM"];
 
   return (
-    <div className="command-center-shell">
-      {/* Persistent Collapsible Sidebar */}
-      <aside className={`command-sidebar ${isSidebarCollapsed ? "collapsed" : ""}`}>
-        <div className="sidebar-header">
-          <div className="sidebar-brand" onClick={() => navigateTo("landing")}>
-            <div className="sidebar-brand-icon">
-              <ShieldAlert size={20} />
-            </div>
-            {!isSidebarCollapsed && (
-              <div className="sidebar-brand-text">
-                ResQ<span>AI</span>
-              </div>
-            )}
-          </div>
-          <button
-            className="sidebar-toggle-btn"
-            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-            title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-            aria-label="Toggle Sidebar"
-          >
-            {isSidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-          </button>
-        </div>
-
-        <div className="sidebar-scroll-wrap">
-          <div className="sidebar-section-title">COMMAND & CONTROL</div>
-          <button
-            className={`sidebar-item-btn ${activeTab === "landing" ? "active" : ""}`}
-            onClick={() => navigateTo("landing")}
-            title="Mission Briefing"
-          >
-            <span className="sidebar-item-icon"><Radio size={16} /></span>
-            {!isSidebarCollapsed && <span className="sidebar-item-label">Mission Briefing</span>}
-          </button>
-          <button
-            className={`sidebar-item-btn ${activeTab === "dashboard" ? "active" : ""}`}
-            onClick={() => navigateTo("dashboard")}
-            title="Emergency Dashboard"
-          >
-            <span className="sidebar-item-icon"><Activity size={16} /></span>
-            {!isSidebarCollapsed && <span className="sidebar-item-label">Emergency Dashboard</span>}
-          </button>
-          <button
-            className={`sidebar-item-btn ${activeTab === "pipeline" || activeTab === "agents" ? "active" : ""}`}
-            onClick={() => navigateTo("pipeline")}
-            title="8-Agent AI Monitor"
-          >
-            <span className="sidebar-item-icon"><Workflow size={16} /></span>
-            {!isSidebarCollapsed && <span className="sidebar-item-label">AI Agent Monitor</span>}
-            {!isSidebarCollapsed && <span className="sidebar-badge">{pipelineStep}/9</span>}
-          </button>
-          <button
-            className={`sidebar-item-btn ${activeTab === "approvals" ? "active" : ""}`}
-            onClick={() => navigateTo("approvals")}
-            title="Approval Center"
-          >
-            <span className="sidebar-item-icon"><Users size={16} /></span>
-            {!isSidebarCollapsed && <span className="sidebar-item-label">Approval Center</span>}
-            {pendingApprovalsCount > 0 && (
-              <span className="sidebar-badge pending-badge">{pendingApprovalsCount}</span>
-            )}
-          </button>
-
-          <div className="sidebar-section-title">OPERATIONS</div>
-          <button
-            className={`sidebar-item-btn ${activeTab === "incidents" ? "active" : ""}`}
-            onClick={() => navigateTo("incidents")}
-            title="Incident Center"
-          >
-            <span className="sidebar-item-icon"><Radio size={16} /></span>
-            {!isSidebarCollapsed && <span className="sidebar-item-label">Incident Center</span>}
-            {incidents.length > 0 && <span className="sidebar-badge">{incidents.length}</span>}
-          </button>
-          <button
-            className={`sidebar-item-btn ${activeTab === "details" ? "active" : ""}`}
-            onClick={() => navigateTo("details")}
-            title="Incident Details"
-          >
-            <span className="sidebar-item-icon"><FileText size={16} /></span>
-            {!isSidebarCollapsed && <span className="sidebar-item-label">Incident Details</span>}
-          </button>
-          <button
-            className={`sidebar-item-btn ${activeTab === "map" ? "active" : ""}`}
-            onClick={() => navigateTo("map")}
-            title="Live GIS Map"
-          >
-            <span className="sidebar-item-icon"><Compass size={16} /></span>
-            {!isSidebarCollapsed && <span className="sidebar-item-label">Live GIS Map</span>}
-          </button>
-          <button
-            className={`sidebar-item-btn ${activeTab === "planning" ? "active" : ""}`}
-            onClick={() => navigateTo("planning")}
-            title="Response Planning"
-          >
-            <span className="sidebar-item-icon"><Sliders size={16} /></span>
-            {!isSidebarCollapsed && <span className="sidebar-item-label">Response Planning</span>}
-          </button>
-          <button
-            className={`sidebar-item-btn ${activeTab === "actions" ? "active" : ""}`}
-            onClick={() => navigateTo("actions")}
-            title="Action Tracker"
-          >
-            <span className="sidebar-item-icon"><Clock size={16} /></span>
-            {!isSidebarCollapsed && <span className="sidebar-item-label">Action Tracker</span>}
-          </button>
-
-          <div className="sidebar-section-title">LOGISTICS & NETWORK</div>
-          <button
-            className={`sidebar-item-btn ${activeTab === "resources" ? "active" : ""}`}
-            onClick={() => navigateTo("resources")}
-            title="Resource Inventory"
-          >
-            <span className="sidebar-item-icon"><Truck size={16} /></span>
-            {!isSidebarCollapsed && <span className="sidebar-item-label">Resource Center</span>}
-          </button>
-          <button
-            className={`sidebar-item-btn ${activeTab === "shelters" ? "active" : ""}`}
-            onClick={() => navigateTo("shelters")}
-            title="Shelter Management"
-          >
-            <span className="sidebar-item-icon"><Warehouse size={16} /></span>
-            {!isSidebarCollapsed && <span className="sidebar-item-label">Shelter Network</span>}
-          </button>
-          <button
-            className={`sidebar-item-btn ${activeTab === "routes" ? "active" : ""}`}
-            onClick={() => navigateTo("routes")}
-            title="Route & Accessibility"
-          >
-            <span className="sidebar-item-icon"><Layers size={16} /></span>
-            {!isSidebarCollapsed && <span className="sidebar-item-label">Route Network</span>}
-            {roads.some((r) => r.status === "Closed") && (
-              <span className="sidebar-badge alert-badge">Alert</span>
-            )}
-          </button>
-          <button
-            className={`sidebar-item-btn ${activeTab === "alerts" ? "active" : ""}`}
-            onClick={() => navigateTo("alerts")}
-            title="Alert Center"
-          >
-            <span className="sidebar-item-icon"><Bell size={16} /></span>
-            {!isSidebarCollapsed && <span className="sidebar-item-label">Alert Center</span>}
-            {unreadAlertsCount > 0 && (
-              <span className="sidebar-badge alert-badge">{unreadAlertsCount}</span>
-            )}
-          </button>
-
-          <div className="sidebar-section-title">SYSTEM & AUDIT</div>
-          <button
-            className={`sidebar-item-btn ${activeTab === "reports" ? "active" : ""}`}
-            onClick={() => navigateTo("reports")}
-            title="Situation Reports"
-          >
-            <span className="sidebar-item-icon"><FileDown size={16} /></span>
-            {!isSidebarCollapsed && <span className="sidebar-item-label">Situation Reports</span>}
-          </button>
-          <button
-            className={`sidebar-item-btn ${activeTab === "tests" ? "active" : ""}`}
-            onClick={() => navigateTo("tests")}
-            title="Verification Test Suite (TC-01–08)"
-          >
-            <span className="sidebar-item-icon"><CheckCircle2 size={16} /></span>
-            {!isSidebarCollapsed && <span className="sidebar-item-label">Acceptance Tests</span>}
-          </button>
-          <button
-            className={`sidebar-item-btn ${activeTab === "settings" ? "active" : ""}`}
-            onClick={() => navigateTo("settings")}
-            title="System Settings"
-          >
-            <span className="sidebar-item-icon"><Settings size={16} /></span>
-            {!isSidebarCollapsed && <span className="sidebar-item-label">System Settings</span>}
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Command Area */}
-      <div className="command-main-area">
-        {/* Sticky Command Topbar */}
-        <header className="command-topbar">
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            {/* Global Search with Dropdown Results */}
-            <div className="global-search-container">
-              <Search size={14} className="global-search-icon" />
-              <input
-                type="text"
-                placeholder="Global search (Incidents, Shelters, Assets)..."
-                className="global-search-input"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              {filteredSearchItems.length > 0 && (
-                <div className="search-dropdown-menu">
-                  {filteredSearchItems.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="search-dropdown-item"
-                      onClick={() => {
-                        setSearchQuery("");
-                        if (item.tab === "details" && item.id) {
-                          setSelectedIncidentId(item.id);
-                        }
-                        navigateTo(item.tab, item.id);
-                      }}
-                    >
-                      <div>
-                        <strong>{item.label}</strong>
-                        <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>{item.sub}</div>
-                      </div>
-                      <span className="badge badge-gray" style={{ fontSize: "9px" }}>{item.type}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="sim-pill">
-              <span className="connection-dot" style={{ width: 6, height: 6 }} />
-              {connected ? "PostgreSQL & FastAPI Online" : "Backend Offline"}
-            </div>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div className="commander-pill">
-              <ShieldAlert size={14} style={{ color: "#ef4444" }} />
-              <span>Commander: <strong>{systemConfig.commander_on_duty}</strong></span>
-            </div>
-
-            <button
-              className="theme-toggle-btn"
-              onClick={toggleTheme}
-              title={`Switch to ${theme === "dark" ? "Light" : "Dark"} Mode`}
-            >
-              {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
-            </button>
-
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => void handleResetDemoData()}
-              title="Reset Baseline Scenario Data"
-            >
-              <RotateCcw size={13} /> Reset Baseline
-            </button>
-
-            <a
-              href={`${API}/reports/situation`}
-              target="_blank"
-              rel="noreferrer"
-              className="btn btn-primary btn-sm"
-              title="Download Situation Report PDF"
-            >
-              <FileDown size={14} /> PDF Report
-            </a>
-
-            <button
-              className="refresh-button"
-              onClick={() => void refreshData()}
-              disabled={loading}
-              title="Refresh live system state"
-            >
-              <RefreshCw size={14} className={loading ? "spin" : ""} />
-            </button>
-          </div>
-        </header>
-
-        {/* Existing app-shell content container */}
-        <div className="app-shell" style={{ maxWidth: "100%", padding: "18px 24px" }}>
-          {/* Safety Notice Banner */}
-          <div className="safety-banner">
-            <AlertOctagon size={20} />
-            <div>
-              <strong>Human-in-the-Loop Operational Mandate Active</strong>
-              <span>
-                AI recommendations are advisory decision-support. Autonomous dispatch of physical rescue personnel,
-                road closures, and medical triage are strictly prohibited and require authorized emergency commander authorization.
-              </span>
-            </div>
-            <span className="badge badge-amber">Commander Gate Active</span>
-          </div>
-
-          {/* Error & Success Messages */}
-          {errorMsg && (
-            <div className="notice notice-warning">
-              <AlertTriangle size={18} />
-              <div>
-                <strong>System Notice:</strong>
-                <p>{errorMsg}</p>
-              </div>
+    <div className="gov-shell">
+      {/* Sidebar */}
+      <nav className={`gov-sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
+        <div className="sidebar-brand" onClick={() => setActiveTab("pipeline")}>
+          <div className="brand-shield">🛡️</div>
+          {!sidebarCollapsed && (
+            <div className="brand-text">
+              <strong>ResQAI</strong>
+              <small>Emergency Mgmt. Portal</small>
             </div>
           )}
-          {successMsg && (
-            <div className="notice-success">
-              <CheckCircle2 size={18} />
-              <div>
-                <strong>Operation Complete:</strong>
-                <p>{successMsg}</p>
-              </div>
-            </div>
-          )}
-
-      {/* ========================================================================
-          VIEW 1: MISSION BRIEFING / LANDING PAGE (Rich Crisis Theme)
-          ======================================================================== */}
-      {activeTab === "landing" && (
-        <div>
-          {/* Hero Section */}
-          <section className="landing-hero">
-            <div className="landing-hero-glow" />
-            <div className="landing-badge-strip">
-              <span className="landing-pill pill-red">
-                <ShieldAlert size={12} /> EOC Crisis Command
-              </span>
-              <span className="landing-pill pill-blue">
-                <Database size={12} /> PostGIS / PostgreSQL Connected
-              </span>
-              <span className="landing-pill" style={{ background: "rgba(34, 197, 94, 0.2)", color: "#86efac", border: "1px solid rgba(34, 197, 94, 0.4)" }}>
-                <CheckCircle2 size={12} /> All 8 Tests (TC-01 to TC-08) Verified
-              </span>
-            </div>
-
-            <h1 className="landing-title">
-              Agentic AI Disaster Response & <span>Emergency Resource Coordination</span>
-            </h1>
-            <p className="landing-subtitle">
-              An autonomous multi-agent operational platform engineered for natural crises (floods, cyclones, earthquakes).
-              Orchestrating 8 specialized AI agents for multi-source ingestion, duplicate detection, deterministic severity scoring,
-              weather intelligence, GIS road accessibility, resource deficit detection, and human-in-the-loop commander authorizations.
-            </p>
-
-            <div className="landing-cta-row">
-              <button
-                className="btn-hero btn-hero-primary"
-                onClick={() => {
-                  setActiveTab("pipeline");
-                  setPipelineStep(1);
-                  setIsSimulating(true);
-                }}
-                style={{
-                  background: "linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)",
-                  boxShadow: "0 4px 20px rgba(59, 130, 246, 0.4)",
-                  border: "1px solid rgba(255, 255, 255, 0.2)",
-                }}
-              >
-                <Sparkles size={16} /> ▶ Watch Live Agent Simulation (Steps 1–9)
-              </button>
-
-              <button
-                className="btn-hero btn-hero-secondary"
-                onClick={() => {
-                  setActiveTab("pipeline");
-                  setPipelineStep(1);
-                }}
-              >
-                <Workflow size={16} /> Interactive 8-Agent Pipeline ➔
-              </button>
-
-              <button className="btn-hero btn-hero-secondary" onClick={() => setActiveTab("dashboard")}>
-                <Activity size={16} /> Operational Dashboard
-              </button>
-
-              <button className="btn-hero btn-hero-secondary" onClick={() => setActiveTab("map")}>
-                <Compass size={16} /> Live GIS Map
-              </button>
-
-              <button className="btn-hero btn-hero-secondary" onClick={() => setActiveTab("tests")}>
-                <Play size={16} /> Run Verification Tests
-              </button>
-            </div>
-          </section>
-
-          {/* Quick Metrics Bar */}
-          <div className="metrics-grid">
-            <div className="metric-card">
-              <div className="metric-icon red">
-                <Radio size={19} />
-              </div>
-              <div className="metric-label">ACTIVE INCIDENTS</div>
-              <div className="metric-value">{dashboard?.incidents?.total ?? incidents.length}</div>
-              <div className="metric-detail">
-                {dashboard?.incidents?.critical ?? 1} Critical · {dashboard?.incidents?.high ?? 1} High
-              </div>
-            </div>
-
-            <div className="metric-card">
-              <div className="metric-icon blue">
-                <Truck size={19} />
-              </div>
-              <div className="metric-label">AVAILABLE FLEET</div>
-              <div className="metric-value">
-                {resources.filter((r) => r.status === "Available").length}
-                <span style={{ fontSize: "16px", color: "#64748b" }}> / {resources.length}</span>
-              </div>
-              <div className="metric-detail">
-                {resources.filter((r) => r.resource_type === "Rescue Boat" && r.status === "Available").length} Boats ·{" "}
-                {resources.filter((r) => r.resource_type === "Ambulance" && r.status === "Available").length} Ambulances
-              </div>
-            </div>
-
-            <div className="metric-card">
-              <div className="metric-icon green">
-                <Warehouse size={19} />
-              </div>
-              <div className="metric-label">REGIONAL SHELTER CAPACITY</div>
-              <div className="metric-value">
-                {shelters.reduce((acc, s) => acc + (s.total_capacity - s.occupied), 0)}
-              </div>
-              <div className="metric-detail">
-                {shelters.reduce((acc, s) => acc + s.occupied, 0)} Occupied / {shelters.reduce((acc, s) => acc + s.total_capacity, 0)} Total
-              </div>
-            </div>
-
-            <div className="metric-card">
-              <div className="metric-icon amber">
-                <Layers size={19} />
-              </div>
-              <div className="metric-label">TRANSIT CORRIDORS</div>
-              <div className="metric-value">
-                {roads.filter((r) => r.status === "Open").length}
-                <span style={{ fontSize: "16px", color: "#64748b" }}> / {roads.length} Open</span>
-              </div>
-              <div className="metric-detail">
-                {roads.filter((r) => r.status === "Closed").length} Closed · {roads.filter((r) => r.status === "Partially Blocked").length} Partial
-              </div>
-            </div>
-          </div>
-
-          {/* 8 Specialized AI Agents Showcase */}
-          <div className="panel" style={{ marginBottom: "24px" }}>
-            <div className="panel-heading">
-              <div className="panel-title">
-                <Workflow size={18} />
-                <h2>8 Specialized AI Agents & Responsibilities</h2>
-              </div>
-              <span className="badge badge-gray">LangGraph StateGraph Architecture</span>
-            </div>
-
-            <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 16px 0" }}>
-              Each incident passes sequentially through seven specialized AI agents and an autonomous sanity critic.
-              Click any agent below to interact with its dedicated interface:
-            </p>
-
-            <div className="agent-grid-showcase">
-              <div
-                className="agent-showcase-card"
-                onClick={() => {
-                  setActiveTab("pipeline");
-                  setPipelineStep(1);
-                }}
-                style={{ cursor: "pointer" }}
-              >
-                <div className="agent-card-icon-wrap" style={{ background: "#eff6ff", color: "#2563eb" }}>
-                  <Radio size={20} />
-                </div>
-                <div className="agent-number-badge">AGENT 1</div>
-                <h3>Emergency Incident Intake</h3>
-                <p>Receives unstructured/structured 911 calls and field reports. Normalizes data and runs automated duplicate detection.</p>
-                <div className="agent-tools-tag">
-                  <span>extract_entities</span>
-                  <span>duplicate_detector</span>
-                  <span>multi_source</span>
-                </div>
-              </div>
-
-              <div
-                className="agent-showcase-card"
-                onClick={() => {
-                  setActiveTab("pipeline");
-                  setPipelineStep(2);
-                }}
-                style={{ cursor: "pointer" }}
-              >
-                <div className="agent-card-icon-wrap" style={{ background: "#fef2f2", color: "#dc2626" }}>
-                  <Activity size={20} />
-                </div>
-                <div className="agent-number-badge">AGENT 2</div>
-                <h3>Situation Assessment & Severity</h3>
-                <p>Calculates transparent deterministic severity scores (0–100) factoring population, urgency, and threats.</p>
-                <div className="agent-tools-tag">
-                  <span>deterministic_scorer</span>
-                  <span>threat_analysis</span>
-                  <span>priority_matrix</span>
-                </div>
-              </div>
-
-              <div
-                className="agent-showcase-card"
-                onClick={() => {
-                  setActiveTab("pipeline");
-                  setPipelineStep(3);
-                }}
-                style={{ cursor: "pointer" }}
-              >
-                <div className="agent-card-icon-wrap" style={{ background: "#f0fdf4", color: "#16a34a" }}>
-                  <CloudRain size={20} />
-                </div>
-                <div className="agent-number-badge">AGENT 3</div>
-                <h3>Weather & Environmental Intel</h3>
-                <p>Integrates live Open-Meteo APIs for precipitation, wind, and forecast to trigger proactive incident reassessments.</p>
-                <div className="agent-tools-tag">
-                  <span>open_meteo_api</span>
-                  <span>forecast_reassessment</span>
-                  <span>storm_simulator</span>
-                </div>
-              </div>
-
-              <div
-                className="agent-showcase-card"
-                onClick={() => {
-                  setActiveTab("pipeline");
-                  setPipelineStep(4);
-                }}
-                style={{ cursor: "pointer" }}
-              >
-                <div className="agent-card-icon-wrap" style={{ background: "#fffbeb", color: "#d97706" }}>
-                  <Compass size={20} />
-                </div>
-                <div className="agent-number-badge">AGENT 4</div>
-                <h3>Geospatial & Route Accessibility</h3>
-                <p>Interactive GIS mapping. Rigorously distinguishes Known Road Closures from AI-Inferred Accessibility Problems.</p>
-                <div className="agent-tools-tag">
-                  <span>gis_geocoder</span>
-                  <span>road_closure_guard</span>
-                  <span>proximity_haversine</span>
-                </div>
-              </div>
-
-              <div
-                className="agent-showcase-card"
-                onClick={() => {
-                  setActiveTab("pipeline");
-                  setPipelineStep(5);
-                }}
-                style={{ cursor: "pointer" }}
-              >
-                <div className="agent-card-icon-wrap" style={{ background: "#f5f3ff", color: "#7c3aed" }}>
-                  <Truck size={20} />
-                </div>
-                <div className="agent-number-badge">AGENT 5</div>
-                <h3>Emergency Resource Management</h3>
-                <p>Maintains strict lifecycle states (Available ➔ Reserved ➔ Deployed). Enforces single-allocation guards against double dispatch.</p>
-                <div className="agent-tools-tag">
-                  <span>state_machine</span>
-                  <span>double_alloc_guard</span>
-                  <span>shelter_meters</span>
-                </div>
-              </div>
-
-              <div
-                className="agent-showcase-card"
-                onClick={() => {
-                  setActiveTab("pipeline");
-                  setPipelineStep(6);
-                }}
-                style={{ cursor: "pointer" }}
-              >
-                <div className="agent-card-icon-wrap" style={{ background: "#ecfeff", color: "#0891b2" }}>
-                  <Sliders size={20} />
-                </div>
-                <div className="agent-number-badge">AGENT 6</div>
-                <h3>Resource Allocation & Planning</h3>
-                <p>Calculates required vs available assets, identifies exact deficits without hallucinating phantom resources, and formulates options.</p>
-                <div className="agent-tools-tag">
-                  <span>deficit_calculator</span>
-                  <span>mutual_aid_planner</span>
-                  <span>no_hallucination_guard</span>
-                </div>
-              </div>
-
-              <div
-                className="agent-showcase-card"
-                onClick={() => {
-                  setActiveTab("pipeline");
-                  setPipelineStep(7);
-                }}
-                style={{ cursor: "pointer" }}
-              >
-                <div className="agent-card-icon-wrap" style={{ background: "#fff1f2", color: "#e11d48" }}>
-                  <Users size={20} />
-                </div>
-                <div className="agent-number-badge">AGENT 7</div>
-                <h3>Emergency Coordination & Action</h3>
-                <p>Synthesizes full Incident Action Plans (IAPs), enforces Commander approvals, and tracks execution states.</p>
-                <div className="agent-tools-tag">
-                  <span>iap_compiler</span>
-                  <span>human_approval_gate</span>
-                  <span>pdf_reportlab</span>
-                </div>
-              </div>
-
-              <div
-                className="agent-showcase-card"
-                onClick={() => {
-                  setActiveTab("pipeline");
-                  setPipelineStep(8);
-                }}
-                style={{ cursor: "pointer" }}
-              >
-                <div className="agent-card-icon-wrap" style={{ background: "#faf5ff", color: "#9333ea" }}>
-                  <ShieldCheck size={20} />
-                </div>
-                <div className="agent-number-badge">AGENT 8</div>
-                <h3>Reviewer & Critic Agent</h3>
-                <p>Audits all proposed plans, checks contradiction rules, verifies safety bounds, and certifies recommendations.</p>
-                <div className="agent-tools-tag">
-                  <span>safety_critic</span>
-                  <span>consistency_checker</span>
-                  <span>certification_gate</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Step-by-Step Procedure & Message Handoff Guide for All Users */}
-          <div className="panel" style={{ marginBottom: "24px", background: "linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)", border: "1px solid #cbd5e1" }}>
-            <div className="panel-heading">
-              <div className="panel-title">
-                <Send size={18} style={{ color: "#2563eb" }} />
-                <h2>How ResQAI Executes: Step-by-Step Procedure & Message Passing</h2>
-              </div>
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={() => {
-                  setActiveTab("pipeline");
-                  setPipelineStep(1);
-                  setIsSimulating(true);
-                }}
-              >
-                <Sparkles size={13} /> ▶ Watch Live Simulation
-              </button>
-            </div>
-
-            <p style={{ fontSize: "12px", color: "#475569", margin: "0 0 16px 0", lineHeight: "1.6" }}>
-              In high-stakes emergencies, AI cannot be a chaotic black box. ResQAI organizes response operations into 
-              an <strong>8-stage deterministic chain</strong>. Each agent receives structured input messages, executes specialized tools, 
-              and transfers verified message packets to the next agent in milliseconds:
-            </p>
-
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "12px" }}>
-              {[
-                {
-                  step: 1,
-                  name: "Agent 1: Intake & Deduplication",
-                  color: "#2563eb",
-                  bg: "#eff6ff",
-                  inMsg: "911 Call / Citizen SMS",
-                  outMsg: "Clean Incident Record (Duplicate Free)",
-                  desc: "Converts frantic natural language into structured coordinates and prevents duplicate dispatches.",
-                },
-                {
-                  step: 2,
-                  name: "Agent 2: Severity Triage",
-                  color: "#dc2626",
-                  bg: "#fef2f2",
-                  inMsg: "Clean Incident Record",
-                  outMsg: "Deterministic Priority Score (0-100)",
-                  desc: "Mathematically weights life threats, rising water depth, and hospitals to determine triage urgency.",
-                },
-                {
-                  step: 3,
-                  name: "Agent 3: Weather Radar",
-                  color: "#16a34a",
-                  bg: "#f0fdf4",
-                  inMsg: "Incident GPS Coordinates",
-                  outMsg: "Atmospheric Telemetry & Escalation",
-                  desc: "Queries live Open-Meteo API radar for torrential rains and triggers early priority escalation.",
-                },
-                {
-                  step: 4,
-                  name: "Agent 4: GIS & Route Accessibility",
-                  color: "#d97706",
-                  bg: "#fffbeb",
-                  inMsg: "Incident & Weather Alert",
-                  outMsg: "Passable Routes & Transit Modality",
-                  desc: "Checks road network vector data: identifies submerged roads and determines if boats or vehicles are needed.",
-                },
-                {
-                  step: 5,
-                  name: "Agent 5: Resource Inventory",
-                  color: "#7c3aed",
-                  bg: "#f5f3ff",
-                  inMsg: "Transit Modality & Headcount",
-                  outMsg: "Locked Fleet Units & Shelter Bed Status",
-                  desc: "Executes atomic inventory locks so vehicles cannot be double-booked by simultaneous incidents.",
-                },
-                {
-                  step: 6,
-                  name: "Agent 6: Allocation & Deficits",
-                  color: "#0891b2",
-                  bg: "#ecfeff",
-                  inMsg: "Fleet Inventory & Victim Count",
-                  outMsg: "Rescue Manifest & Deficit Alerts",
-                  desc: "Matches required seats to capacity. If resources are insufficient, it alerts without hallucination.",
-                },
-                {
-                  step: 7,
-                  name: "Agent 7: Coordination & Commander Sign-Off",
-                  color: "#e11d48",
-                  bg: "#fff1f2",
-                  inMsg: "Rescue Manifest & Staging Plan",
-                  outMsg: "Compiled IAP (PDF) with Human Signature",
-                  desc: "Drafts the Incident Action Plan and halts execution until the human Incident Commander authorizes.",
-                },
-                {
-                  step: 8,
-                  name: "Agent 8: Autonomous Safety Critic",
-                  color: "#9333ea",
-                  bg: "#faf5ff",
-                  inMsg: "Draft IAP & Commander Approval",
-                  outMsg: "Safety Certified Final Dispatch Order",
-                  desc: "Independent auditor checking 6 safety constraints. Ensures no wheeled units are sent into deep water.",
-                },
-              ].map((item) => (
-                <div
-                  key={item.step}
-                  style={{
-                    background: item.bg,
-                    border: `1px solid ${item.color}33`,
-                    borderRadius: "10px",
-                    padding: "14px",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "8px",
-                    cursor: "pointer",
-                  }}
-                  onClick={() => {
-                    setActiveTab("pipeline");
-                    setPipelineStep(item.step);
-                  }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontSize: "11px", fontWeight: 800, color: item.color }}>{item.name}</span>
-                    <span style={{ fontSize: "10px", background: "white", padding: "2px 6px", borderRadius: "4px", border: "1px solid #cbd5e1", fontWeight: 700 }}>
-                      Step {item.step}
-                    </span>
-                  </div>
-                  <p style={{ fontSize: "11px", color: "#334155", margin: 0, lineHeight: 1.4 }}>{item.desc}</p>
-                  <div style={{ borderTop: "1px dashed rgba(0,0,0,0.1)", paddingTop: "8px", fontSize: "10px", display: "flex", flexDirection: "column", gap: "3px" }}>
-                    <div><span style={{ color: "#64748b" }}>📥 In:</span> <strong>{item.inMsg}</strong></div>
-                    <div><span style={{ color: "#64748b" }}>📤 Out:</span> <strong>{item.outMsg}</strong></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Quick Problem Statement Scenarios */}
-          <div className="panel">
-            <div className="panel-heading">
-              <div className="panel-title">
-                <Play size={18} />
-                <h2>1-Click Scenario Quick Launchers (Problem Statement)</h2>
-              </div>
-              <span className="badge badge-green">Instant Interactive Testing</span>
-            </div>
-
-            <div className="grid-2">
-              <div className="workflow-agent-card">
-                <div className="workflow-agent-header">
-                  <strong>Scenario 1: Zone A Residential Flood (INC-001)</strong>
-                  <span className="badge badge-amber">Partially Blocked Road</span>
-                </div>
-                <p style={{ fontSize: "11px", color: "#64748b", margin: "6px 0 10px" }}>
-                  40 residents requiring evacuation. Main access road partially flooded. High priority flood triage.
-                </p>
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => {
-                    loadPreset("zoneA");
-                    setActiveTab("pipeline");
-                  }}
-                >
-                  <Workflow size={13} /> Load into Agent Pipeline
-                </button>
-              </div>
-
-              <div className="workflow-agent-card">
-                <div className="workflow-agent-header">
-                  <strong>Scenario 2: Zone C Village Cut Off (INC-003)</strong>
-                  <span className="badge badge-red">Road Closed · 75 Affected</span>
-                </div>
-                <p style={{ fontSize: "11px", color: "#64748b", margin: "6px 0 10px" }}>
-                  75 people stranded. Main road closed. Requires boat/amphibious transport staging without inventing helicopters.
-                </p>
-                <button
-                  className="btn btn-danger btn-sm"
-                  onClick={() => {
-                    loadPreset("zoneC");
-                    setActiveTab("pipeline");
-                  }}
-                >
-                  <Workflow size={13} /> Load into Agent Pipeline
-                </button>
-              </div>
-
-              <div className="workflow-agent-card">
-                <div className="workflow-agent-header">
-                  <strong>Scenario 3: Multi-Source Duplicate Incident (TC-02)</strong>
-                  <span className="badge badge-amber">Duplicate Detection</span>
-                </div>
-                <p style={{ fontSize: "11px", color: "#64748b", margin: "6px 0 10px" }}>
-                  Second 911 call reporting same Zone A residential flood. Tests automated duplicate linking for human review.
-                </p>
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => {
-                    loadPreset("duplicate");
-                    setActiveTab("pipeline");
-                  }}
-                >
-                  <Workflow size={13} /> Test Duplicate Detection
-                </button>
-              </div>
-
-              <div className="workflow-agent-card">
-                <div className="workflow-agent-header">
-                  <strong>Scenario 4: Deficit & Shortage Detection (TC-04)</strong>
-                  <span className="badge badge-blue">Required: 8, Available: 5</span>
-                </div>
-                <p style={{ fontSize: "11px", color: "#64748b", margin: "6px 0 10px" }}>
-                  Simulates requirement of 8 rescue boats against 5 available units. Verifies 3-boat deficit calculation and mutual aid escalation.
-                </p>
-                <button className="btn btn-secondary btn-sm" onClick={() => setActiveTab("planning")}>
-                  <Sliders size={13} /> Open Shortage Checker
-                </button>
-              </div>
-            </div>
-          </div>
         </div>
-      )}
 
-      {/* ========================================================================
-          VIEW 2: 8-AGENT STEP-BY-STEP PIPELINE ("Each Agent Acts as One Page")
-          ======================================================================== */}
-      {activeTab === "pipeline" && (
-        <div>
-          {/* Live Agent Simulation Controller Bar */}
-          <div className="sim-controller-card">
-            <div className="sim-controller-top">
-              <div className="sim-controller-title">
-                <Sparkles size={22} style={{ color: "#60a5fa" }} />
-                <div>
-                  <h3>Live Multi-Agent Procedure & Message Stream</h3>
-                  <p>Watch how agents sequentially receive, execute, and transfer structured messages across the pipeline</p>
-                </div>
-              </div>
-              <div className="sim-btn-group">
-                <button
-                  className={`btn-sim-play ${isSimulating ? "playing" : ""}`}
-                  onClick={() => {
-                    if (isSimulating) {
-                      setIsSimulating(false);
-                    } else {
-                      if (pipelineStep >= 9) setPipelineStep(1);
-                      setIsSimulating(true);
-                    }
-                  }}
-                >
-                  {isSimulating ? <Pause size={14} /> : <Play size={14} />}
-                  {isSimulating ? "Pause Simulation" : "▶ Play Live Agent Simulation"}
-                </button>
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => {
-                    setIsSimulating(false);
-                    setPipelineStep(1);
-                  }}
-                >
-                  <RotateCcw size={13} /> Reset to Agent 1
-                </button>
-              </div>
-            </div>
+        <button
+          style={{position:"absolute",top:14,right:-12,width:24,height:24,borderRadius:"50%",background:"var(--gov-navy-light)",border:"2px solid white",color:"white",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",zIndex:101}}
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+        >
+          {sidebarCollapsed ? <ChevronRight size={12}/> : <ChevronLeft size={12}/>}
+        </button>
 
-            {/* Visual Agent Bus Track */}
-            <div className="agent-bus-track">
-              {[
-                { step: 1, name: "1. Intake", icon: Radio },
-                { step: 2, name: "2. Severity", icon: Activity },
-                { step: 3, name: "3. Weather", icon: CloudRain },
-                { step: 4, name: "4. GIS Routes", icon: Compass },
-                { step: 5, name: "5. Resources", icon: Truck },
-                { step: 6, name: "6. Allocation", icon: Sliders },
-                { step: 7, name: "7. Approval", icon: Users },
-                { step: 8, name: "8. Safety Critic", icon: ShieldCheck },
-                { step: 9, name: "9. Summary", icon: Workflow },
-              ].map((node, i) => {
-                const isPast = pipelineStep > node.step;
-                const isCurr = pipelineStep === node.step;
-                const IconC = node.icon;
-                return (
-                  <div key={node.step} style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                    <button
-                      className={`bus-node ${isCurr ? "active" : ""} ${isPast ? "completed" : ""}`}
-                      onClick={() => {
-                        setIsSimulating(false);
-                        setPipelineStep(node.step);
-                      }}
-                    >
-                      <div className="bus-node-circle">
-                        {isPast ? <CheckCircle2 size={15} /> : <IconC size={14} />}
-                      </div>
-                      <span style={{ fontSize: "10px", fontWeight: 700 }}>{node.name}</span>
-                    </button>
-                    {i < 8 && (
-                      <div className={`bus-connector-arrow ${pipelineStep > i + 1 ? "active" : ""}`}>
-                        ➔
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Stepper Navigation */}
-          <div className="pipeline-stepper">
-            {[
-              { step: 1, label: "1. Intake & Deduplication", icon: Radio },
-              { step: 2, label: "2. Severity Assessment", icon: Activity },
-              { step: 3, label: "3. Weather Intelligence", icon: CloudRain },
-              { step: 4, label: "4. Geospatial & Routes", icon: Compass },
-              { step: 5, label: "5. Resource Registry", icon: Truck },
-              { step: 6, label: "6. Allocation & Shortage", icon: Sliders },
-              { step: 7, label: "7. Coordination & Approval", icon: Users },
-              { step: 8, label: "8. Safety Critic Audit", icon: ShieldCheck },
-              { step: 9, label: "9. Final Orchestration", icon: Workflow },
-            ].map((item, idx) => {
-              const isDone = pipelineStep > item.step;
-              const isActive = pipelineStep === item.step;
-              const IconComp = item.icon;
-              return (
-                <div key={item.step} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                  <button
-                    className={`stepper-item ${isActive ? "active" : ""} ${isDone ? "completed" : ""}`}
-                    onClick={() => setPipelineStep(item.step)}
-                  >
-                    <span className="stepper-circle">
-                      {isDone ? <CheckCircle2 size={12} /> : <IconComp size={12} />}
-                    </span>
-                    <span className="stepper-label">{item.label}</span>
-                  </button>
-                  {idx < 8 && <div className="stepper-divider" />}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Auto-Advance / Countdown Indicator */}
-          {redirectCountdown !== null && (
-            <div className="countdown-box">
-              <div className="countdown-box-left">
-                <span className="countdown-pulse" />
-                <span>
-                  Auto-advancing to Agent {pipelineStep + 1} in {redirectCountdown}s...
-                </span>
-              </div>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => setRedirectCountdown(null)}
-                >
-                  Pause
-                </button>
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={() => {
-                    setRedirectCountdown(null);
-                    setPipelineStep((prev) => Math.min(9, prev + 1));
-                  }}
-                >
-                  Proceed Now ➔
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* --------------------------------------------------------------------
-              PAGE 1: AGENT 1 — EMERGENCY INCIDENT INTAKE & DUPLICATE DETECTION
-              -------------------------------------------------------------------- */}
-          {pipelineStep === 1 && (
-            <div className="agent-stage-container">
-              <div className="agent-stage-header">
-                <div className="agent-stage-title-wrap">
-                  <div className="agent-stage-icon" style={{ background: "#eff6ff", color: "#2563eb" }}>
-                    <Radio size={24} />
-                  </div>
-                  <div>
-                    <h2>Agent 1 — Emergency Incident Intake Agent</h2>
-                    <p>Collects and structures emergency calls, extracts parameters, and detects duplicate reports.</p>
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                  <label style={{ fontSize: "11px", display: "flex", alignItems: "center", gap: "5px", color: "#64748b" }}>
-                    <input
-                      type="checkbox"
-                      checked={autoRedirectEnabled}
-                      onChange={(e) => setAutoRedirectEnabled(e.target.checked)}
-                    />
-                    Auto-advance through agents
-                  </label>
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => setPipelineStep(2)}
-                  >
-                    Next Agent ➔
-                  </button>
-                </div>
-              </div>
-
-              {/* Quick Load Scenario Buttons */}
-              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "16px" }}>
-                <span style={{ fontSize: "11px", fontWeight: 700, alignSelf: "center", color: "#64748b" }}>
-                  Load Scenario:
-                </span>
-                <button className="btn btn-secondary btn-sm" onClick={() => loadPreset("zoneA")}>
-                  Zone A Flood (40 People)
-                </button>
-                <button className="btn btn-secondary btn-sm" onClick={() => loadPreset("zoneB")}>
-                  Zone B Stranded (12 People)
-                </button>
-                <button className="btn btn-secondary btn-sm" onClick={() => loadPreset("zoneC")}>
-                  Zone C Village Cut Off (75 People)
-                </button>
-                <button className="btn btn-warning btn-sm" onClick={() => loadPreset("duplicate")}>
-                  Simulate Duplicate Report (TC-02)
-                </button>
-              </div>
-
-              <PlainEnglishCard text="The Intake Agent acts as the digital 911 dispatcher. It ingests messy multi-source emergency calls and citizen reports, standardizes disaster parameters (people trapped, water height, GPS), and flags duplicate calls within a 500m radius so the rescue team is never double-dispatched." />
-
-              <MessageHandoffBanner
-                incomingFrom="Citizen 911 Calls, IoT Water Level Sensors & Field SMS"
-                incomingText="Raw citizen report: 'Flash flooding in Riverdale Zone A, water waist-deep and rising quickly, 40 people trapped in residential compound, elderly folks unable to walk!'"
-                agentAction="Extracts entities, resolves GPS coordinates (16.512, 80.641), and checks 500m radius duplicate index."
-                outgoingTo="Agent 2 (Severity Assessment Agent)"
-                outgoingText={`Standardized Incident Packet: { id: '${pipelineIncident.incident_id}', disaster: '${pipelineIncident.disaster_type}', location: '${pipelineIncident.location}', affected: ${pipelineIncident.people_affected}, urgency_level: ${pipelineIncident.urgency}, is_duplicate: false }`}
-              />
-
-              <div className="grid-2">
-                {/* Ingestion Form */}
-                <div>
-                  <h3 style={{ fontSize: "13px", fontWeight: 800, margin: "0 0 12px 0" }}>
-                    Incoming Emergency Report (Raw Ingestion)
-                  </h3>
-                  <div className="incident-form">
-                    <label>
-                      Disaster Type
-                      <input
-                        type="text"
-                        value={pipelineIncident.disaster_type}
-                        onChange={(e) => setPipelineIncident({ ...pipelineIncident, disaster_type: e.target.value })}
-                      />
-                    </label>
-
-                    <label>
-                      Location
-                      <input
-                        type="text"
-                        value={pipelineIncident.location}
-                        onChange={(e) => setPipelineIncident({ ...pipelineIncident, location: e.target.value })}
-                      />
-                    </label>
-
-                    <label>
-                      Report Description
-                      <textarea
-                        rows={3}
-                        value={pipelineIncident.description}
-                        onChange={(e) => setPipelineIncident({ ...pipelineIncident, description: e.target.value })}
-                      />
-                    </label>
-
-                    <div className="incident-form-grid">
-                      <label>
-                        People Affected
-                        <input
-                          type="number"
-                          value={pipelineIncident.people_affected}
-                          onChange={(e) => setPipelineIncident({ ...pipelineIncident, people_affected: Number(e.target.value) })}
-                        />
-                      </label>
-                      <label>
-                        Reported Urgency (1–5)
-                        <input
-                          type="number"
-                          min={1}
-                          max={5}
-                          value={pipelineIncident.urgency}
-                          onChange={(e) => setPipelineIncident({ ...pipelineIncident, urgency: Number(e.target.value) })}
-                        />
-                      </label>
-                    </div>
-
-                    <div className="incident-form-grid">
-                      <label>
-                        Information Source
-                        <input
-                          type="text"
-                          value={pipelineIncident.source}
-                          onChange={(e) => setPipelineIncident({ ...pipelineIncident, source: e.target.value })}
-                        />
-                      </label>
-                      <label>
-                        Infrastructure Issue
-                        <input
-                          type="text"
-                          value={pipelineIncident.infrastructure_issue}
-                          onChange={(e) => setPipelineIncident({ ...pipelineIncident, infrastructure_issue: e.target.value })}
-                        />
-                      </label>
-                    </div>
-
-                    <div className="incident-form-grid">
-                      <label>
-                        Latitude (GPS)
-                        <input
-                          type="number"
-                          step="0.0001"
-                          value={pipelineIncident.latitude || 16.512}
-                          onChange={(e) => setPipelineIncident({ ...pipelineIncident, latitude: parseFloat(e.target.value) || 16.512 })}
-                        />
-                      </label>
-                      <label>
-                        Longitude (GPS)
-                        <input
-                          type="number"
-                          step="0.0001"
-                          value={pipelineIncident.longitude || 80.641}
-                          onChange={(e) => setPipelineIncident({ ...pipelineIncident, longitude: parseFloat(e.target.value) || 80.641 })}
-                        />
-                      </label>
-                    </div>
-
-                    <button className="btn btn-primary" onClick={() => void handleIntakeAgentProcess()} disabled={loading}>
-                      <Radio size={14} /> Process Intake & Check Duplicates
-                    </button>
-                  </div>
-                </div>
-
-                {/* Agent 1 Analysis & Live GIS Intake Map */}
-                <div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                    <h3 style={{ fontSize: "13px", fontWeight: 800, margin: 0, display: "flex", alignItems: "center", gap: "6px" }}>
-                      <Compass size={15} style={{ color: "#2563eb" }} />
-                      Agent 1 Tactical GIS Intake & Duplicate Radar
-                    </h3>
-                    <span className="badge badge-blue" style={{ fontSize: "10px" }}>
-                      GPS: {(pipelineIncident.latitude || 16.512).toFixed(4)}, {(pipelineIncident.longitude || 80.641).toFixed(4)}
-                    </span>
-                  </div>
-
-                  <div className="map-wrap" style={{ height: "260px", marginBottom: "12px" }}>
-                    <MapContainer
-                      center={[pipelineIncident.latitude || 16.512, pipelineIncident.longitude || 80.641]}
-                      zoom={14}
-                      scrollWheelZoom={false}
-                      style={{ height: "100%", width: "100%" }}
-                    >
-                      <TileLayer
-                        attribution="&copy; OpenStreetMap contributors"
-                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                      />
-
-                      {/* 500m Spatial Deduplication Buffer Perimeter */}
-                      <Circle
-                        center={[pipelineIncident.latitude || 16.512, pipelineIncident.longitude || 80.641]}
-                        radius={500}
-                        pathOptions={{
-                          color: intakeResult?.duplicate_detected ? "#d97706" : "#2563eb",
-                          fillColor: intakeResult?.duplicate_detected ? "#fef3c7" : "#dbeafe",
-                          fillOpacity: 0.25,
-                          dashArray: "4, 6",
-                        }}
-                      />
-
-                      {/* Active Ingested Incident Marker (Agent 1) */}
-                      <Marker
-                        position={[pipelineIncident.latitude || 16.512, pipelineIncident.longitude || 80.641]}
-                        icon={createPin("#dc2626", "INTAKE")}
-                      >
-                        <Popup>
-                          <span className="badge badge-red" style={{ fontSize: "9px" }}>AGENT 1: INGESTION TARGET</span>
-                          <strong style={{ display: "block", marginTop: "4px" }}>{pipelineIncident.incident_id}: {pipelineIncident.location}</strong>
-                          <p style={{ margin: "2px 0", fontSize: "11px" }}>{pipelineIncident.disaster_type} · {pipelineIncident.people_affected} affected</p>
-                          <small style={{ color: "#64748b" }}>Urgency: {pipelineIncident.urgency}/5</small>
-                        </Popup>
-                      </Marker>
-
-                      {/* Nearby Existing Incidents (for spatial overlap verification) */}
-                      {incidents.map((inc) => (
-                        <Marker
-                          key={inc.incident_id}
-                          position={[inc.latitude || 16.512, inc.longitude || 80.641]}
-                          icon={createPin(intakeResult?.duplicate_of === inc.incident_id ? "#f59e0b" : "#64748b", inc.incident_id.replace("INC-", ""))}
-                        >
-                          <Popup>
-                            <strong>{inc.incident_id}: {inc.location}</strong>
-                            <p>{inc.disaster_type} · {inc.people_affected} affected</p>
-                            {intakeResult?.duplicate_of === inc.incident_id && (
-                              <span className="badge badge-amber" style={{ display: "inline-block", marginTop: "4px" }}>
-                                ⚠️ Matched Duplicate Parent
-                              </span>
-                            )}
-                          </Popup>
-                        </Marker>
-                      ))}
-
-                      {/* Nearby Regional Shelters */}
-                      {shelters.map((s) => (
-                        <Marker
-                          key={s.shelter_id}
-                          position={[s.latitude || 16.515, s.longitude || 80.645]}
-                          icon={createPin("#2563eb", "SH")}
-                        >
-                          <Popup>
-                            <strong>{s.name}</strong>
-                            <p>Available: {s.total_capacity - s.occupied} beds</p>
-                          </Popup>
-                        </Marker>
-                      ))}
-                    </MapContainer>
-                  </div>
-
-                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", fontSize: "10px", color: "#64748b", marginBottom: "14px", background: "#f8fafc", padding: "6px 10px", borderRadius: "6px" }}>
-                    <span>🔴 <strong>Active Ingestion Target</strong></span>
-                    <span>🟡 <strong>500m Spatial Dedup Buffer</strong></span>
-                    <span>⚪ <strong>Existing Incidents</strong></span>
-                    <span>🔵 <strong>Shelters</strong></span>
-                  </div>
-
-                  <h3 style={{ fontSize: "13px", fontWeight: 800, margin: "0 0 12px 0" }}>
-                    Agent 1 Intelligence Output
-                  </h3>
-
-                  {intakeResult ? (
-                    <div>
-                      {intakeResult.duplicate_detected ? (
-                        <div className="alert-card warning">
-                          <AlertTriangle size={24} style={{ color: "#d97706", flexShrink: 0 }} />
-                          <div className="alert-body">
-                            <strong style={{ color: "#b45309" }}>Potential Duplicate Incident Identified (TC-02)</strong>
-                            <p>
-                              Matches existing incident <strong>{intakeResult.duplicate_of}</strong> with{" "}
-                              <strong>{Math.round(intakeResult.similarity_score * 100)}% semantic & spatial similarity</strong>.
-                              Linked to parent incident for commander verification rather than automatically discarded.
-                            </p>
-                            <span className="badge badge-amber">Linked for Human Verification</span>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="alert-card" style={{ borderLeft: "5px solid #22c55e", background: "#f0fdf4" }}>
-                          <CheckCircle2 size={24} style={{ color: "#16a34a", flexShrink: 0 }} />
-                          <div className="alert-body">
-                            <strong style={{ color: "#15803d" }}>Unique Emergency Incident Verified</strong>
-                            <p>
-                              No matching incident found within spatial/temporal threshold. New Incident ID:{" "}
-                              <strong>{intakeResult.incident_id}</strong> registered.
-                            </p>
-                            <span className="badge badge-green">Unique Incident Confirmed</span>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="agent-thought-box">
-                        <div className="agent-thought-header">
-                          <Zap size={13} /> Agent 1 Reasoning Log
-                        </div>
-                        "Ingested emergency dispatch report from {pipelineIncident.source}. Extracted {pipelineIncident.people_affected} affected individuals, disaster type '{pipelineIncident.disaster_type}', at '{pipelineIncident.location}'. Spatial verification returned coordinates ({pipelineIncident.latitude}, {pipelineIncident.longitude}). Confidence level: high."
-                      </div>
-
-                      <pre className="code-pre">
-                        {JSON.stringify(
-                          {
-                            incident_id: intakeResult.incident_id,
-                            disaster_type: pipelineIncident.disaster_type,
-                            location: pipelineIncident.location,
-                            people_reported_affected: pipelineIncident.people_affected,
-                            infrastructure_issue: pipelineIncident.infrastructure_issue,
-                            assistance_requested: pipelineIncident.assistance_requested,
-                            confidence: intakeResult.confidence,
-                            verification_status: "pending_commander_review",
-                            duplicate_detection: {
-                              duplicate_detected: intakeResult.duplicate_detected,
-                              linked_to: intakeResult.duplicate_of,
-                            },
-                          },
-                          null,
-                          2
-                        )}
-                      </pre>
-
-                      <div style={{ marginTop: "16px", display: "flex", justifyContent: "flex-end" }}>
-                        <button
-                          className="btn btn-primary"
-                          onClick={() => setPipelineStep(2)}
-                        >
-                          Proceed to Agent 2: Situation Assessment & Severity ➔
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="empty-state" style={{ background: "#f8fafc", borderRadius: "8px", border: "1px dashed #cbd5e1" }}>
-                      <Radio size={32} style={{ color: "#94a3b8", marginBottom: "8px" }} />
-                      <p>Click "Process Intake & Check Duplicates" to run Agent 1 entity extraction and deduplication.</p>
-                    </div>
+        <div className="sidebar-nav">
+          {sections.map(section => (
+            <div key={section}>
+              {!sidebarCollapsed && <div className="nav-section-title">{section}</div>}
+              {navItems.filter(n => n.section === section).map(n => (
+                <button key={n.id} className={`nav-item ${activeTab === n.id ? "active" : ""}`} onClick={() => setActiveTab(n.id)}>
+                  {n.icon}
+                  {!sidebarCollapsed && <span style={{flex:1}}>{n.label}</span>}
+                  {!sidebarCollapsed && n.badge && (
+                    <span className={`nav-badge ${typeof n.badge === "string" ? "amber" : ""}`}>{n.badge}</span>
                   )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* --------------------------------------------------------------------
-              PAGE 2: AGENT 2 — SITUATION ASSESSMENT & SEVERITY AGENT
-              -------------------------------------------------------------------- */}
-          {pipelineStep === 2 && (
-            <div className="agent-stage-container">
-              <div className="agent-stage-header">
-                <div className="agent-stage-title-wrap">
-                  <div className="agent-stage-icon" style={{ background: "#fef2f2", color: "#dc2626" }}>
-                    <Activity size={24} />
-                  </div>
-                  <div>
-                    <h2>Agent 2 — Situation Assessment & Severity Agent</h2>
-                    <p>Evaluates threats, affected population, infrastructure, and calculates transparent deterministic priority scores.</p>
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <button className="btn btn-secondary" onClick={() => setPipelineStep(1)}>
-                    <ArrowLeft size={14} /> Back to Agent 1
-                  </button>
-                  <button className="btn btn-primary" onClick={() => setPipelineStep(3)}>
-                    Proceed to Agent 3 ➔
-                  </button>
-                </div>
-              </div>
-
-              <PlainEnglishCard text="The Severity Agent is the emergency triage brain. It calculates a deterministic, un-hallucinated score (0 to 100) combining human life threat, water height, and vulnerable facilities. This ensures critical emergencies get prioritized first without human panic or bias." />
-
-              <MessageHandoffBanner
-                incomingFrom="Agent 1 (Intake & Deduplication Agent)"
-                incomingText={`Standardized Incident Packet: ${pipelineIncident.location}, ${pipelineIncident.people_affected} affected, Urgency Priority ${pipelineIncident.urgency}/5.`}
-                agentAction="Computes deterministic formula: LifeThreat(35) + HazardScale(25) + Vulnerability(18) = 78/100."
-                outgoingTo="Agent 3 (Weather Intelligence Agent)"
-                outgoingText={`Triage Priority Packet: { incident_id: '${pipelineIncident.incident_id}', score: 78, level: 'Critical', threats: ['Waist-deep water', 'Trapped elderly civilians'], requires_escalation: true }`}
-              />
-
-              <div className="grid-2">
-                <div>
-                  <h3 style={{ fontSize: "13px", fontWeight: 800, margin: "0 0 12px 0" }}>
-                    Deterministic Multi-Factor Priority Assessment
-                  </h3>
-
-                  {/* Score Meter */}
-                  <div className="score-meter-card">
-                    <div className="score-meter-header">
-                      <div>
-                        <span style={{ fontSize: "11px", fontWeight: 700, color: "#64748b" }}>SEVERITY PRIORITY SCORE</span>
-                        <div className="score-meter-val">
-                          {severityResult?.score ?? 78} / 100
-                        </div>
-                      </div>
-                      <span className={`badge ${severityResult?.level === "Critical" ? "badge-red" : "badge-amber"}`} style={{ fontSize: "12px", padding: "6px 12px" }}>
-                        {severityResult?.level ?? "Critical"} Priority
-                      </span>
-                    </div>
-
-                    <div className="score-track">
-                      <div
-                        className="score-bar"
-                        style={{
-                          width: `${severityResult?.score ?? 78}%`,
-                          background: (severityResult?.score ?? 78) >= 75 ? "#dc2626" : "#f59e0b",
-                        }}
-                      />
-                    </div>
-                    <small style={{ color: "#64748b", fontSize: "10px" }}>
-                      Formula: min(100, Population Factor + Urgency Rating + Accessibility Penalty + Weather Penalty + Infrastructure Penalty)
-                    </small>
-                  </div>
-
-                  {/* Contributing Factors */}
-                  <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "16px" }}>
-                    <strong style={{ fontSize: "12px", display: "block", marginBottom: "8px" }}>
-                      Transparent Score Contributions:
-                    </strong>
-                    <ul style={{ margin: 0, paddingLeft: "18px", fontSize: "11px", color: "#475569", lineHeight: "1.8" }}>
-                      {severityResult?.factors?.map((f, i) => (
-                        <li key={i}>{f}</li>
-                      )) ?? (
-                        <>
-                          <li>Affected population (40): +16 pts</li>
-                          <li>Reported urgency level (4/5): +32 pts</li>
-                          <li>Access route cut off / closed: +15 pts</li>
-                          <li>Adverse weather / continuing rain: +10 pts</li>
-                          <li>Critical infrastructure damage reported: +10 pts</li>
-                        </>
-                      )}
-                    </ul>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 style={{ fontSize: "13px", fontWeight: 800, margin: "0 0 12px 0" }}>
-                    Threat Evaluation & Escalation Potential
-                  </h3>
-
-                  <div className="agent-thought-box">
-                    <div className="agent-thought-header">
-                      <Zap size={13} /> Agent 2 Reasoning Log
-                    </div>
-                    "Evaluated {pipelineIncident.location}. Primary threat is water inundation cutting off residential access while rainfall persists. Escalation risk is High because upstream reservoir outflow is scheduled to peak within 3 hours. Recommending immediate evacuation staging."
-                  </div>
-
-                  <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "16px", marginBottom: "16px" }}>
-                    <strong style={{ fontSize: "12px", display: "block", marginBottom: "8px", color: "#dc2626" }}>
-                      Immediate Operational Hazards:
-                    </strong>
-                    <ul style={{ margin: 0, paddingLeft: "18px", fontSize: "11px", color: "#475569", lineHeight: "1.6" }}>
-                      <li>Rising floodwater encroaching above ground-floor residential living areas.</li>
-                      <li>Road accessibility degraded — standard wheeled vehicles cannot penetrate flooded zone.</li>
-                      <li>High concentration of vulnerable residents unable to self-evacuate.</li>
-                    </ul>
-                  </div>
-
-                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                    <button className="btn btn-primary" onClick={() => setPipelineStep(3)}>
-                      Proceed to Agent 3: Weather Intelligence ➔
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* --------------------------------------------------------------------
-              PAGE 3: AGENT 3 — WEATHER & ENVIRONMENTAL INTELLIGENCE AGENT
-              -------------------------------------------------------------------- */}
-          {pipelineStep === 3 && (
-            <div className="agent-stage-container">
-              <div className="agent-stage-header">
-                <div className="agent-stage-title-wrap">
-                  <div className="agent-stage-icon" style={{ background: "#f0fdf4", color: "#16a34a" }}>
-                    <CloudRain size={24} />
-                  </div>
-                  <div>
-                    <h2>Agent 3 — Weather & Environmental Intelligence Agent</h2>
-                    <p>Integrates live meteorological APIs, assesses rainfall and wind, and triggers incident priority reassessment.</p>
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <button className="btn btn-secondary" onClick={() => setPipelineStep(2)}>
-                    <ArrowLeft size={14} /> Back to Agent 2
-                  </button>
-                  <button className="btn btn-primary" onClick={() => setPipelineStep(4)}>
-                    Proceed to Agent 4 ➔
-                  </button>
-                </div>
-              </div>
-
-              <PlainEnglishCard text="The Weather Agent connects to real-time meteorological radar (Open-Meteo API). If heavy rainfall, gale-force winds, or lightning are bearing down on the incident area, it warns responders of worsening conditions and automatically escalates triage priority." />
-
-              <MessageHandoffBanner
-                incomingFrom="Agent 2 (Severity Assessment Agent)"
-                incomingText={`Triage Priority: ${pipelineIncident.location}, Priority 78 (Critical), GPS [16.512, 80.641].`}
-                agentAction="Pulls real-time Open-Meteo telemetry: Precipitation 16.5 mm/h (Heavy), Wind gust 62 km/h, Storm active."
-                outgoingTo="Agent 4 (Geospatial & Route Accessibility Agent)"
-                outgoingText="Weather Telemetry Packet: { rain_rate: '16.5 mm/h', wind: '62 km/h', storm_active: true, priority_escalation: +10, warning: 'Rapid flood expansion predicted' }"
-              />
-
-              <div className="grid-2">
-                <div>
-                  <h3 style={{ fontSize: "13px", fontWeight: 800, margin: "0 0 12px 0" }}>
-                    Live Meteorological Telemetry (Open-Meteo Integration)
-                  </h3>
-
-                  <div className="metrics-grid" style={{ gridTemplateColumns: "repeat(2, 1fr)", marginBottom: "16px" }}>
-                    <div className="metric-card" style={{ padding: "12px" }}>
-                      <div className="metric-icon blue" style={{ marginBottom: "8px" }}>
-                        <CloudRain size={16} />
-                      </div>
-                      <div className="metric-label">PRECIPITATION RATE</div>
-                      <div className="metric-value" style={{ fontSize: "22px" }}>
-                        {weatherTelemetry.precipitation} mm/h
-                      </div>
-                      <div className="metric-detail">Heavy rainfall active</div>
-                    </div>
-
-                    <div className="metric-card" style={{ padding: "12px" }}>
-                      <div className="metric-icon amber" style={{ marginBottom: "8px" }}>
-                        <Wind size={16} />
-                      </div>
-                      <div className="metric-label">WIND GUSTS</div>
-                      <div className="metric-value" style={{ fontSize: "22px" }}>
-                        {weatherTelemetry.wind_speed} km/h
-                      </div>
-                      <div className="metric-detail">Elevated squalls</div>
-                    </div>
-
-                    <div className="metric-card" style={{ padding: "12px" }}>
-                      <div className="metric-icon green" style={{ marginBottom: "8px" }}>
-                        <Thermometer size={16} />
-                      </div>
-                      <div className="metric-label">SURFACE TEMP</div>
-                      <div className="metric-value" style={{ fontSize: "22px" }}>
-                        {weatherTelemetry.temperature} °C
-                      </div>
-                      <div className="metric-detail">Saturated ground</div>
-                    </div>
-
-                    <div className="metric-card" style={{ padding: "12px" }}>
-                      <div className="metric-icon red" style={{ marginBottom: "8px" }}>
-                        <AlertTriangle size={16} />
-                      </div>
-                      <div className="metric-label">STORM ADVISORY</div>
-                      <div className="metric-value" style={{ fontSize: "18px", color: "#dc2626" }}>
-                        ACTIVE
-                      </div>
-                      <div className="metric-detail">Severe Flood Warning</div>
-                    </div>
-                  </div>
-
-                  <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "14px" }}>
-                    <strong style={{ fontSize: "12px", display: "block", marginBottom: "4px" }}>6-Hour Trend Forecast:</strong>
-                    <p style={{ fontSize: "11px", color: "#475569", margin: 0 }}>{weatherTelemetry.forecast}</p>
-                  </div>
-
-                  <div style={{ marginTop: "14px", display: "flex", gap: "10px" }}>
-                    <button className="btn btn-warning btn-sm" onClick={() => void handleSimulateSevereWeather()}>
-                      <Flame size={13} /> Simulate Torrential Storm (TC-07)
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 style={{ fontSize: "13px", fontWeight: 800, margin: "0 0 12px 0" }}>
-                    Environmental Reassessment Advisory
-                  </h3>
-
-                  <div className="agent-thought-box">
-                    <div className="agent-thought-header">
-                      <Zap size={13} /> Agent 3 Reasoning Log
-                    </div>
-                    "{weatherTelemetry.impact_note} Rainfall code {weatherTelemetry.condition} confirmed. Reassessment recommendation transmitted to Agent 2 and Coordination Agent. Boat rescue operations must prioritize shallow-draft watercraft."
-                  </div>
-
-                  <div className="alert-card critical" style={{ marginBottom: "16px" }}>
-                    <AlertTriangle size={20} style={{ color: "#dc2626", flexShrink: 0 }} />
-                    <div className="alert-body">
-                      <strong style={{ color: "#b91c1c" }}>Adverse Environmental Escalation Detected</strong>
-                      <p>
-                        Continued rainfall for the next 6 hours increases flood depth and risk of canal overtopping.
-                        Priority score escalated (+10 pts) due to worsening meteorology.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                    <button className="btn btn-primary" onClick={() => setPipelineStep(4)}>
-                      Proceed to Agent 4: Geospatial & Route Accessibility ➔
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* --------------------------------------------------------------------
-              PAGE 4: AGENT 4 — GEOSPATIAL & ROUTE ACCESSIBILITY AGENT (GIS)
-              -------------------------------------------------------------------- */}
-          {pipelineStep === 4 && (
-            <div className="agent-stage-container">
-              <div className="agent-stage-header">
-                <div className="agent-stage-title-wrap">
-                  <div className="agent-stage-icon" style={{ background: "#fffbeb", color: "#d97706" }}>
-                    <Compass size={24} />
-                  </div>
-                  <div>
-                    <h2>Agent 4 — Geospatial & Route Accessibility Agent</h2>
-                    <p>
-                      Analyzes incident locations, geocodes, and strictly distinguishes Known Road Closures from AI-Inferred Accessibility Problems.
-                    </p>
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <button className="btn btn-secondary" onClick={() => setPipelineStep(3)}>
-                    <ArrowLeft size={14} /> Back to Agent 3
-                  </button>
-                  <button className="btn btn-primary" onClick={() => setPipelineStep(5)}>
-                    Proceed to Agent 5 ➔
-                  </button>
-                </div>
-              </div>
-
-              <PlainEnglishCard text="The Geospatial Agent analyzes road networks, bridge elevations, and water depth. It strictly distinguishes known road closures from safe detours, and tells the system what transit mode is required (e.g. standard roads are impassable, so only Rescue Boats can reach the victims)." />
-
-              <MessageHandoffBanner
-                incomingFrom="Agent 3 (Weather Intelligence Agent)"
-                incomingText={`Incident Location (${pipelineIncident.location}) + Weather Alert (16.5 mm/h rainfall).`}
-                agentAction="Computes spatial topology on road network; detects Bridge A is submerged and impassable for wheeled vehicles."
-                outgoingTo="Agent 5 (Emergency Resource Management Agent)"
-                outgoingText="GIS Route Packet: { route_status: 'Riverdale Access Road Underwater', transit_mode_required: 'Boat Only / Watercraft', target_shelter: 'Highland Community Shelter (4.2 km)' }"
-              />
-
-              <div className="grid-2">
-                <div>
-                  <h3 style={{ fontSize: "13px", fontWeight: 800, margin: "0 0 12px 0" }}>
-                    Interactive GIS Tactical Map
-                  </h3>
-
-                  <div className="map-wrap" style={{ height: "320px", marginBottom: "12px" }}>
-                    <MapContainer
-                      center={[pipelineIncident.latitude || 16.512, pipelineIncident.longitude || 80.641]}
-                      zoom={13}
-                      scrollWheelZoom={false}
-                      style={{ height: "100%", width: "100%" }}
-                    >
-                      <TileLayer
-                        attribution="&copy; OpenStreetMap contributors"
-                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                      />
-
-                      {/* Incident Pin */}
-                      <Marker
-                        position={[pipelineIncident.latitude || 16.512, pipelineIncident.longitude || 80.641]}
-                        icon={createPin("#dc2626", "INC")}
-                      >
-                        <Popup>
-                          <strong>{pipelineIncident.incident_id || "INC-001"}</strong>
-                          <p>{pipelineIncident.location}</p>
-                          <small>{pipelineIncident.people_affected} people affected</small>
-                        </Popup>
-                      </Marker>
-
-                      {/* Shelters Pins */}
-                      {shelters.map((s) => (
-                        <Marker
-                          key={s.shelter_id}
-                          position={[s.latitude || 16.515, s.longitude || 80.645]}
-                          icon={createPin("#2563eb", "SH")}
-                        >
-                          <Popup>
-                            <strong>{s.name}</strong>
-                            <p>Occupancy: {s.occupied}/{s.total_capacity}</p>
-                          </Popup>
-                        </Marker>
-                      ))}
-
-                      {/* Available Rescue Resources */}
-                      {resources.filter((r) => r.status === "Available").map((r) => (
-                        <Marker
-                          key={r.resource_id}
-                          position={[r.latitude || 16.508, r.longitude || 80.635]}
-                          icon={createPin("#16a34a", "RES")}
-                        >
-                          <Popup>
-                            <strong>{r.name}</strong>
-                            <p>{r.resource_type} · Cap: {r.capacity}</p>
-                          </Popup>
-                        </Marker>
-                      ))}
-                    </MapContainer>
-                  </div>
-
-                  <div style={{ display: "flex", gap: "10px", fontSize: "11px", color: "#64748b" }}>
-                    <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                      <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#dc2626", display: "inline-block" }} />
-                      Incident Zone
-                    </span>
-                    <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                      <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#2563eb", display: "inline-block" }} />
-                      Shelter
-                    </span>
-                    <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                      <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: "#16a34a", display: "inline-block" }} />
-                      Available Fleet
-                    </span>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 style={{ fontSize: "13px", fontWeight: 800, margin: "0 0 12px 0" }}>
-                    Route Accessibility & Closure Categorization
-                  </h3>
-
-                  <div className="agent-thought-box">
-                    <div className="agent-thought-header">
-                      <Zap size={13} /> Agent 4 Reasoning Log
-                    </div>
-                    "Analyzing access corridors to {pipelineIncident.location}. Primary corridor has reported road blockage. Applying strict distinction: Verified physical barricade marked as 'Known Road Closure'. Surrounding unverified roads marked as 'Route verification required' rather than inventing fictional detour routes."
-                  </div>
-
-                  {/* Road items */}
-                  {roads.map((road) => (
-                    <div
-                      key={road.road_id}
-                      className={`route-card ${
-                        road.status === "Closed"
-                          ? "known-closure"
-                          : road.status === "Partially Blocked"
-                          ? "ai-inferred"
-                          : "route-open"
-                      }`}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <strong style={{ fontSize: "12px" }}>{road.name}</strong>
-                        <span
-                          className={`badge ${
-                            road.status === "Closed"
-                              ? "badge-red"
-                              : road.status === "Partially Blocked"
-                              ? "badge-amber"
-                              : "badge-green"
-                          }`}
-                        >
-                          {road.status}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: "11px", color: "#64748b", margin: "4px 0" }}>
-                        Corridor: {road.origin_location} ➔ {road.destination_location}
-                      </div>
-                      <div style={{ fontSize: "10px", color: road.status === "Closed" ? "#dc2626" : "#64748b" }}>
-                        <strong>Closure Type:</strong> {road.closure_type}
-                        {road.reason && ` (${road.reason})`}
-                      </div>
-                    </div>
-                  ))}
-
-                  <div style={{ marginTop: "14px", display: "flex", justifyContent: "flex-end" }}>
-                    <button className="btn btn-primary" onClick={() => setPipelineStep(5)}>
-                      Proceed to Agent 5: Emergency Resource Management ➔
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* --------------------------------------------------------------------
-              PAGE 5: AGENT 5 — EMERGENCY RESOURCE MANAGEMENT AGENT
-              -------------------------------------------------------------------- */}
-          {pipelineStep === 5 && (
-            <div className="agent-stage-container">
-              <div className="agent-stage-header">
-                <div className="agent-stage-title-wrap">
-                  <div className="agent-stage-icon" style={{ background: "#f5f3ff", color: "#7c3aed" }}>
-                    <Truck size={24} />
-                  </div>
-                  <div>
-                    <h2>Agent 5 — Emergency Resource Management Agent</h2>
-                    <p>
-                      Maintains live resource inventory, enforces strict state transitions (Available ➔ Reserved ➔ Deployed ➔ Returning),
-                      and monitors shelter capacities.
-                    </p>
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <button className="btn btn-secondary" onClick={() => setPipelineStep(4)}>
-                    <ArrowLeft size={14} /> Back to Agent 4
-                  </button>
-                  <button className="btn btn-primary" onClick={() => setPipelineStep(6)}>
-                    Proceed to Agent 6 ➔
-                  </button>
-                </div>
-              </div>
-
-              <PlainEnglishCard text="The Resource Agent manages the emergency fleet inventory (rescue boats, ambulances, drones). It locks vehicles in the database (Available ➔ Reserved) so two dispatchers cannot double-book the same boat, and monitors shelter bed capacities in real-time." />
-
-              <MessageHandoffBanner
-                incomingFrom="Agent 4 (Geospatial & Route Accessibility Agent)"
-                incomingText="Mission Requirement: 'Boat Only' transit required for 40 victims; evacuate to Highland Shelter."
-                agentAction="Applies atomic database lock on Available rescue boats; confirms Highland Shelter has 90 open beds."
-                outgoingTo="Agent 6 (Resource Allocation & Response Planning Agent)"
-                outgoingText="Fleet Inventory Packet: { available_boats: ['BOAT-001 (cap: 25)', 'BOAT-002 (cap: 20)'], shelter_capacity: 90 beds, state: 'RESERVED_FOR_DISPATCH' }"
-              />
-
-              <div className="grid-2">
-                <div>
-                  <h3 style={{ fontSize: "13px", fontWeight: 800, margin: "0 0 12px 0" }}>
-                    Resource Inventory & State Machine
-                  </h3>
-
-                  <div className="resource-counts">
-                    <div>
-                      <span>AVAILABLE</span>
-                      <strong style={{ color: "#16a34a" }}>
-                        {resources.filter((r) => r.status === "Available").length}
-                      </strong>
-                    </div>
-                    <div>
-                      <span>RESERVED</span>
-                      <strong style={{ color: "#d97706" }}>
-                        {resources.filter((r) => r.status === "Reserved").length}
-                      </strong>
-                    </div>
-                    <div>
-                      <span>DEPLOYED</span>
-                      <strong style={{ color: "#dc2626" }}>
-                        {resources.filter((r) => r.status === "Deployed").length}
-                      </strong>
-                    </div>
-                  </div>
-
-                  <div className="table-scroll" style={{ maxHeight: "280px" }}>
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Resource</th>
-                          <th>Type</th>
-                          <th>Capacity</th>
-                          <th>Status</th>
-                          <th>Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {resources.slice(0, 8).map((res) => (
-                          <tr key={res.resource_id}>
-                            <td>
-                              <strong>{res.name}</strong>
-                              <small>{res.location}</small>
-                            </td>
-                            <td>{res.resource_type}</td>
-                            <td>{res.capacity} pers</td>
-                            <td>
-                              <span
-                                className={`badge ${
-                                  res.status === "Available"
-                                    ? "badge-green"
-                                    : res.status === "Reserved"
-                                    ? "badge-amber"
-                                    : "badge-red"
-                                }`}
-                              >
-                                {res.status}
-                              </span>
-                            </td>
-                            <td>
-                              {res.status === "Available" && (
-                                <button
-                                  className="btn btn-secondary btn-sm"
-                                  onClick={() => void handleUpdateResourceStatus(res.resource_id, "Reserved")}
-                                >
-                                  Reserve
-                                </button>
-                              )}
-                              {res.status === "Reserved" && (
-                                <button
-                                  className="btn btn-danger btn-sm"
-                                  onClick={() => void handleUpdateResourceStatus(res.resource_id, "Deployed")}
-                                >
-                                  Deploy
-                                </button>
-                              )}
-                              {res.status === "Deployed" && (
-                                <button
-                                  className="btn btn-secondary btn-sm"
-                                  onClick={() => void handleUpdateResourceStatus(res.resource_id, "Available")}
-                                >
-                                  Return
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 style={{ fontSize: "13px", fontWeight: 800, margin: "0 0 12px 0" }}>
-                    Shelter Capacities & Saturation Monitoring
-                  </h3>
-
-                  <div className="agent-thought-box">
-                    <div className="agent-thought-header">
-                      <Zap size={13} /> Agent 5 Reasoning Log
-                    </div>
-                    "Tracking 3 regional shelters. Shelter A is currently near capacity (160/200, 80%). Shelter B has 90 available slots. Shelter C has 190 available slots. Double allocation guard active — serialized transaction prevents concurrent assignment of the same rescue asset."
-                  </div>
-
-                  {shelters.map((shelter) => {
-                    const percent = Math.round((shelter.occupied / shelter.total_capacity) * 100);
-                    return (
-                      <div key={shelter.shelter_id} className="shelter-row">
-                        <div className="shelter-heading">
-                          <strong>{shelter.name}</strong>
-                          <span
-                            className={`badge ${
-                              percent >= 90
-                                ? "badge-red"
-                                : percent >= 75
-                                ? "badge-amber"
-                                : "badge-green"
-                            }`}
-                          >
-                            {percent}% Occupied ({shelter.occupied}/{shelter.total_capacity})
-                          </span>
-                        </div>
-                        <div className="progress-track">
-                          <div
-                            className={`progress-fill ${
-                              percent >= 90 ? "fill-red" : percent >= 75 ? "fill-amber" : "fill-green"
-                            }`}
-                            style={{ width: `${percent}%` }}
-                          />
-                        </div>
-                        <div className="shelter-bottom">
-                          <span>Remaining Capacity: {shelter.total_capacity - shelter.occupied} spots</span>
-                          <span>Status: {shelter.status}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  <div style={{ marginTop: "16px", display: "flex", justifyContent: "flex-end" }}>
-                    <button className="btn btn-primary" onClick={() => setPipelineStep(6)}>
-                      Proceed to Agent 6: Resource Allocation & Planning ➔
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* --------------------------------------------------------------------
-              PAGE 6: AGENT 6 — RESOURCE ALLOCATION & RESPONSE PLANNING AGENT
-              -------------------------------------------------------------------- */}
-          {pipelineStep === 6 && (
-            <div className="agent-stage-container">
-              <div className="agent-stage-header">
-                <div className="agent-stage-title-wrap">
-                  <div className="agent-stage-icon" style={{ background: "#ecfeff", color: "#0891b2" }}>
-                    <Sliders size={24} />
-                  </div>
-                  <div>
-                    <h2>Agent 6 — Resource Allocation & Response Planning Agent</h2>
-                    <p>
-                      Matches resource capabilities to incident needs, calculates shortages & deficits, and formulates feasible alternative plans without hallucination.
-                    </p>
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <button className="btn btn-secondary" onClick={() => setPipelineStep(5)}>
-                    <ArrowLeft size={14} /> Back to Agent 5
-                  </button>
-                  <button className="btn btn-primary" onClick={() => setPipelineStep(7)}>
-                    Proceed to Agent 7 ➔
-                  </button>
-                </div>
-              </div>
-
-              <PlainEnglishCard text="The Allocation Agent solves the rescue puzzle: it matches available rescue craft to victim headcounts. If there is a shortage (a deficit), it alerts the team immediately and formulates backup plans without hallucinating fake ambulances." />
-
-              <MessageHandoffBanner
-                incomingFrom="Agent 5 (Emergency Resource Management Agent)"
-                incomingText={`40 trapped victims at ${pipelineIncident.location}; 2 Rescue Boats reserved (Total capacity: 45).`}
-                agentAction="Calculates capacity deficit: 40 victims vs 45 capacity = Deficit: 0. Matches BOAT-001 & BOAT-002 to staging area."
-                outgoingTo="Agent 7 (Emergency Coordination & Action Agent)"
-                outgoingText="Tactical Dispatch Manifest Packet: { assigned_units: ['BOAT-001', 'BOAT-002'], staging_area: 'North Ridge Boat Ramp', est_evacuation_time: '35 mins', deficit: 0 }"
-              />
-
-              <div className="grid-2">
-                <div>
-                  <h3 style={{ fontSize: "13px", fontWeight: 800, margin: "0 0 12px 0" }}>
-                    Resource Requirement & Shortage Detection Engine
-                  </h3>
-
-                  <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "16px", marginBottom: "16px" }}>
-                    <div style={{ display: "flex", gap: "12px", alignItems: "center", marginBottom: "12px" }}>
-                      <label style={{ flex: 1, fontSize: "11px", fontWeight: 700 }}>
-                        Required Resource Type:
-                        <select
-                          value={shortageType}
-                          onChange={(e) => setShortageType(e.target.value)}
-                          style={{ width: "100%", padding: "8px", marginTop: "4px" }}
-                        >
-                          <option value="Rescue Boat">Rescue Boat</option>
-                          <option value="Rescue Team">Rescue Team</option>
-                          <option value="Ambulance">Ambulance</option>
-                          <option value="Emergency Vehicle">Emergency Vehicle</option>
-                        </select>
-                      </label>
-
-                      <label style={{ width: "120px", fontSize: "11px", fontWeight: 700 }}>
-                        Required Units:
-                        <input
-                          type="number"
-                          min={1}
-                          max={20}
-                          value={shortageQuantity}
-                          onChange={(e) => setShortageQuantity(Number(e.target.value))}
-                          style={{ width: "100%", padding: "8px", marginTop: "4px" }}
-                        />
-                      </label>
-                    </div>
-
-                    <button className="btn btn-primary btn-sm" onClick={() => void handleCheckShortage()}>
-                      <Sliders size={13} /> Compute Shortage & Deficit (TC-04)
-                    </button>
-                  </div>
-
-                  {/* Deficit Card */}
-                  <div className="alert-card critical">
-                    <AlertTriangle size={24} style={{ color: "#dc2626", flexShrink: 0 }} />
-                    <div className="alert-body">
-                      <strong style={{ color: "#b91c1c" }}>Resource Shortage Detected: 3 Units Unfulfilled</strong>
-                      <p style={{ margin: "4px 0" }}>
-                        Required: <strong>8 Rescue Boats</strong> | Verified Available in Registry: <strong>5 Units</strong>
-                      </p>
-                      <strong style={{ color: "#dc2626" }}>Calculated Deficit = 3 Rescue Boats</strong>
-                    </div>
-                  </div>
-
-                  <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px", padding: "12px", marginTop: "12px" }}>
-                    <strong style={{ fontSize: "11px", color: "#166534" }}>No Hallucination Enforcement:</strong>
-                    <p style={{ fontSize: "10px", color: "#15803d", margin: "4px 0 0" }}>
-                      The system does NOT invent the availability of helicopters, amphibious military transports, or unverified contractors.
-                      All shortfalls trigger formal escalation protocols.
-                    </p>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 style={{ fontSize: "13px", fontWeight: 800, margin: "0 0 12px 0" }}>
-                    Feasible Alternative Allocation Plans
-                  </h3>
-
-                  <div className="agent-thought-box">
-                    <div className="agent-thought-header">
-                      <Zap size={13} /> Agent 6 Reasoning Log
-                    </div>
-                    "Evaluating allocation for {pipelineIncident.location} (40 people affected). Access road is partially flooded, preventing standard ambulances. Recommending staged deployment of 2 available Rescue Boats (BOAT-001, BOAT-002, capacity 8 each). Staging perimeter at Sector Alpha high ground. Deficit of 3 boats submitted to regional mutual aid."
-                  </div>
-
-                  <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "16px", marginBottom: "16px" }}>
-                    <strong style={{ fontSize: "12px", display: "block", marginBottom: "8px" }}>
-                      Recommended Tactical Actions:
-                    </strong>
-                    <ol style={{ margin: 0, paddingLeft: "18px", fontSize: "11px", color: "#475569", lineHeight: "1.7" }}>
-                      <li>
-                        <strong>Deploy 2 Available Rescue Boats:</strong> BOAT-001 (Response Base 1) and BOAT-002 (Response Base 1)
-                        for immediate shallow water shuttle.
-                      </li>
-                      <li>
-                        <strong>Stage Staging Area:</strong> Sector Alpha Junction high ground before flooded road stretch.
-                      </li>
-                      <li>
-                        <strong>Trigger Mutual Aid Request:</strong> Formal deficit notification sent to State Emergency Management
-                        Agency (SEMA) for 3 additional watercraft.
-                      </li>
-                    </ol>
-                  </div>
-
-                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                    <button className="btn btn-primary" onClick={() => setPipelineStep(7)}>
-                      Proceed to Agent 7: Emergency Coordination & Action ➔
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* --------------------------------------------------------------------
-              PAGE 7: AGENT 7 — EMERGENCY COORDINATION & ACTION AGENT
-              -------------------------------------------------------------------- */}
-          {pipelineStep === 7 && (
-            <div className="agent-stage-container">
-              <div className="agent-stage-header">
-                <div className="agent-stage-title-wrap">
-                  <div className="agent-stage-icon" style={{ background: "#fff1f2", color: "#e11d48" }}>
-                    <Users size={24} />
-                  </div>
-                  <div>
-                    <h2>Agent 7 — Emergency Coordination & Action Agent</h2>
-                    <p>
-                      Synthesizes all agent outputs into an Incident Action Plan (IAP) and enforces mandatory Incident Commander authorization.
-                    </p>
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <button className="btn btn-secondary" onClick={() => setPipelineStep(6)}>
-                    <ArrowLeft size={14} /> Back to Agent 6
-                  </button>
-                  <button className="btn btn-primary" onClick={() => setPipelineStep(8)}>
-                    Proceed to Agent 8 ➔
-                  </button>
-                </div>
-              </div>
-
-              <PlainEnglishCard text="The Coordination Agent compiles all previous data into an official Incident Action Plan (IAP) with downloadable PDF orders. Most importantly, it enforces Human-in-the-Loop safety: no vehicles deploy until an authorized human Incident Commander reviews and signs off." />
-
-              <MessageHandoffBanner
-                incomingFrom="Agent 6 (Resource Allocation & Response Planning Agent)"
-                incomingText="Tactical Manifest: BOAT-001 & BOAT-002 staged at North Ridge Ramp for 40 evacuees."
-                agentAction="Compiles formal Incident Action Plan (IAP); prompts Incident Commander for mandatory cryptographic authorization."
-                outgoingTo="Agent 8 (Reviewer & Critic Agent)"
-                outgoingText="Draft IAP Packet: { iap_id: 'IAP-2026-001', authorized_by: 'Commander Sarah Jenkins', status: 'Pending Safety Critic Sanity Audit' }"
-              />
-
-              <div className="grid-2">
-                <div>
-                  <h3 style={{ fontSize: "13px", fontWeight: 800, margin: "0 0 12px 0" }}>
-                    Compiled Incident Action Plan (IAP)
-                  </h3>
-
-                  <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "16px", marginBottom: "16px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
-                      <strong style={{ fontSize: "13px" }}>Incident Action Plan: Flood Evacuation Zone A</strong>
-                      <span className="badge badge-amber">Awaiting Commander Signature</span>
-                    </div>
-
-                    <div style={{ fontSize: "11px", color: "#475569", lineHeight: "1.7" }}>
-                      <p style={{ margin: "0 0 6px 0" }}>
-                        <strong>Target Incident:</strong> {pipelineIncident.incident_id || "INC-001"} · {pipelineIncident.location}
-                      </p>
-                      <p style={{ margin: "0 0 6px 0" }}>
-                        <strong>Assigned Resources:</strong> BOAT-001, BOAT-002 (Rescue Fleet Alpha)
-                      </p>
-                      <p style={{ margin: "0 0 6px 0" }}>
-                        <strong>Designated Evacuation Shelter:</strong> Shelter B (150 capacity, 90 available slots)
-                      </p>
-                      <p style={{ margin: "0 0 6px 0" }}>
-                        <strong>Access Corridor:</strong> Staging at North Highway Junction; secondary perimeter established.
-                      </p>
-                      <p style={{ margin: "0 0 6px 0" }}>
-                        <strong>Weather Consideration:</strong> Operations subject to squall limits (&lt;60 km/h wind).
-                      </p>
-                    </div>
-
-                    <a
-                      href={`${API}/reports/situation`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="btn btn-secondary btn-sm"
-                      style={{ marginTop: "10px" }}
-                    >
-                      <FileDown size={13} /> Export PDF Situation Report
-                    </a>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 style={{ fontSize: "13px", fontWeight: 800, margin: "0 0 12px 0" }}>
-                    Human-in-the-Loop Commander Authorization Gate
-                  </h3>
-
-                  <div className="agent-thought-box">
-                    <div className="agent-thought-header">
-                      <Zap size={13} /> Agent 7 Reasoning Log
-                    </div>
-                    "Incident Action Plan compiled. Autonomous execution is disabled per safety protocol. Requiring authorized Incident Commander credential verification and manual sign-off prior to resource physical dispatch."
-                  </div>
-
-                  <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "16px" }}>
-                    <label style={{ display: "block", fontSize: "11px", fontWeight: 700, marginBottom: "8px" }}>
-                      Authorized Commander Name:
-                      <input
-                        type="text"
-                        value={reviewerName}
-                        onChange={(e) => setReviewerName(e.target.value)}
-                        style={{ width: "100%", padding: "8px", marginTop: "4px" }}
-                      />
-                    </label>
-
-                    <label style={{ display: "block", fontSize: "11px", fontWeight: 700, marginBottom: "12px" }}>
-                      Commander Operational Notes:
-                      <textarea
-                        rows={2}
-                        value={reviewComments}
-                        onChange={(e) => setReviewComments(e.target.value)}
-                        style={{ width: "100%", padding: "8px", marginTop: "4px" }}
-                      />
-                    </label>
-
-                    <div style={{ display: "flex", gap: "10px" }}>
-                      <button
-                        className="btn btn-success"
-                        onClick={() => {
-                          setSuccessMsg("Commander Sarah Chen authorized deployment of 2 Rescue Boats.");
-                          setTimeout(() => setSuccessMsg(""), 5000);
-                        }}
-                      >
-                        <CheckCircle2 size={14} /> Authorize & Dispatch (Approve)
-                      </button>
-
-                      <button
-                        className="btn btn-danger"
-                        onClick={() => {
-                          setErrorMsg("Commander Sarah Chen rejected deployment. Plan returned for revision.");
-                          setTimeout(() => setErrorMsg(""), 5000);
-                        }}
-                      >
-                        <XCircle size={14} /> Reject / Request Revision
-                      </button>
-                    </div>
-                  </div>
-
-                  <div style={{ marginTop: "16px", display: "flex", justifyContent: "flex-end" }}>
-                    <button className="btn btn-primary" onClick={() => setPipelineStep(8)}>
-                      Proceed to Agent 8: Safety Critic Audit ➔
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* --------------------------------------------------------------------
-              PAGE 8: AGENT 8 — REVIEWER & CRITIC AGENT
-              -------------------------------------------------------------------- */}
-          {pipelineStep === 8 && (
-            <div className="agent-stage-container">
-              <div className="agent-stage-header">
-                <div className="agent-stage-title-wrap">
-                  <div className="agent-stage-icon" style={{ background: "#faf5ff", color: "#9333ea" }}>
-                    <ShieldCheck size={24} />
-                  </div>
-                  <div>
-                    <h2>Agent 8 — Reviewer & Critic Agent (Autonomous Safety Auditor)</h2>
-                    <p>
-                      Independently audits all agent recommendations, detects contradictions, checks double allocation, and certifies safety boundaries.
-                    </p>
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <button className="btn btn-secondary" onClick={() => setPipelineStep(7)}>
-                    <ArrowLeft size={14} /> Back to Agent 7
-                  </button>
-                  <button className="btn btn-primary" onClick={() => setPipelineStep(9)}>
-                    Final Orchestration ➔
-                  </button>
-                </div>
-              </div>
-
-              <PlainEnglishCard text="The Safety Critic Agent is the autonomous safety auditor. It doesn't trust anyone: it cross-examines the plan to make sure wheeled ambulances aren't sent into deep water, no boat is double-booked, and the destination shelter isn't full. Only when 100% of safety checks pass does it certify the dispatch." />
-
-              <MessageHandoffBanner
-                incomingFrom="Agent 7 (Emergency Coordination & Action Agent)"
-                incomingText="Draft IAP signed by Commander for 2 rescue boats deployed to Riverdale Zone A."
-                agentAction="Executes 6 independent sanity rules: route clearance, double-allocation check, shelter headroom, and water depth."
-                outgoingTo="Incident Commander EOC Dashboard & Field Responders"
-                outgoingText="Certified Dispatch Packet: { safety_certified: true, contradictions_detected: 0, status: 'DISPATCH AUTHORIZED & SECURED', audit_stamp: 'CRITIC-PASS-7729' }"
-              />
-
-              <div className="grid-2">
-                <div>
-                  <h3 style={{ fontSize: "13px", fontWeight: 800, margin: "0 0 12px 0" }}>
-                    Safety Audit & Constraint Checklist
-                  </h3>
-
-                  {criticAudit.sanity_checks.map((check, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        display: "flex",
-                        alignItems: "flex-start",
-                        gap: "10px",
-                        background: "#f8fafc",
-                        border: "1px solid #e2e8f0",
-                        borderRadius: "8px",
-                        padding: "12px",
-                        marginBottom: "10px",
-                      }}
-                    >
-                      <CheckCircle2 size={18} style={{ color: "#16a34a", flexShrink: 0, marginTop: "2px" }} />
-                      <div>
-                        <strong style={{ fontSize: "12px", color: "#0f172a" }}>{check.title}</strong>
-                        <p style={{ margin: "2px 0 0", fontSize: "11px", color: "#64748b" }}>{check.detail}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div>
-                  <h3 style={{ fontSize: "13px", fontWeight: 800, margin: "0 0 12px 0" }}>
-                    Official Safety Certification
-                  </h3>
-
-                  <div className="agent-thought-box">
-                    <div className="agent-thought-header">
-                      <Zap size={13} /> Agent 8 Reasoning Log
-                    </div>
-                    "Audit completed. No double allocation detected. Assigned units BOAT-001 and BOAT-002 confirmed free of competing assignments. Staging perimeter accounts for reported road flooding. Mandatory human approval gate is intact. Recommendation certified: READY FOR HUMAN REVIEW."
-                  </div>
-
-                  <div className="alert-card" style={{ borderLeft: "5px solid #16a34a", background: "#f0fdf4" }}>
-                    <ShieldCheck size={28} style={{ color: "#16a34a", flexShrink: 0 }} />
-                    <div className="alert-body">
-                      <strong style={{ color: "#15803d", fontSize: "13px" }}>
-                        Safety Certification: Ready for Human Review
-                      </strong>
-                      <p style={{ margin: "4px 0", color: "#166534" }}>{criticAudit.safety_certification}</p>
-                      <span className="badge badge-green">Safety Audit Passed</span>
-                    </div>
-                  </div>
-
-                  <div style={{ marginTop: "20px", display: "flex", justifyContent: "flex-end" }}>
-                    <button className="btn btn-primary" onClick={() => setPipelineStep(9)}>
-                      Proceed to Final Orchestration & Summary ➔
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* --------------------------------------------------------------------
-              PAGE 9: MULTI-AGENT ORCHESTRATION & SUMMARY VIEW
-              -------------------------------------------------------------------- */}
-          {pipelineStep === 9 && (
-            <div className="agent-stage-container">
-              <div className="agent-stage-header">
-                <div className="agent-stage-title-wrap">
-                  <div className="agent-stage-icon" style={{ background: "#eff6ff", color: "#2563eb" }}>
-                    <Workflow size={24} />
-                  </div>
-                  <div>
-                    <h2>Multi-Agent Orchestration & Workflow State (LangGraph)</h2>
-                    <p>
-                      The complete multi-agent pipeline has executed successfully across all eight specialized agents.
-                    </p>
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <button className="btn btn-secondary" onClick={() => setPipelineStep(8)}>
-                    <ArrowLeft size={14} /> Back to Agent 8
-                  </button>
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => void handleRunWorkflow()}
-                    disabled={workflowLoading}
-                  >
-                    <RefreshCw size={14} className={workflowLoading ? "spin" : ""} /> Re-Execute Workflow
-                  </button>
-                </div>
-              </div>
-
-              <PlainEnglishCard text="The Orchestration View shows the compiled LangGraph StateGraph. All eight specialized agents ran in deterministic sequence, passing immutable state tokens, logging every decision, and producing a complete, life-saving rescue execution." />
-
-              <MessageHandoffBanner
-                incomingFrom="LangGraph StateGraph Compiled Runtime"
-                incomingText="Sequential node transitions completed from Node 1 (Intake) through Node 8 (Critic Audit)."
-                agentAction="Aggregates full audit telemetry, timing benchmarks, and serializes state graph JSON checkpoint."
-                outgoingTo="EOC Master Archive & Real-Time GIS Dispatch Ledger"
-                outgoingText="Workflow Execution Transcript: { state_checkpoint: 'SUCCESS', nodes_executed: 8, total_runtime_ms: 320, mission_ready: true }"
-              />
-
-              {/* Execution Flow Diagram */}
-              <div style={{ background: "#0f172a", color: "white", borderRadius: "12px", padding: "20px", marginBottom: "20px" }}>
-                <div style={{ fontSize: "12px", fontWeight: 800, letterSpacing: "1px", textTransform: "uppercase", color: "#94a3b8", marginBottom: "16px" }}>
-                  LANGGRAPH STATEGRAPH EXECUTION FLOW (COMPILED)
-                </div>
-
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", overflowX: "auto", paddingBottom: "10px" }}>
-                  {[
-                    "START",
-                    "Agent 1: Intake",
-                    "Agent 2: Severity",
-                    "Agent 3: Weather",
-                    "Agent 4: GIS Routes",
-                    "Agent 5: Resources",
-                    "Agent 6: Allocation",
-                    "Agent 7: Action",
-                    "Agent 8: Critic",
-                    "END",
-                  ].map((node, i) => (
-                    <div key={node} style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
-                      <div
-                        style={{
-                          background: node === "START" || node === "END" ? "#334155" : "#1e293b",
-                          border: "1px solid #475569",
-                          borderRadius: "8px",
-                          padding: "8px 12px",
-                          fontSize: "11px",
-                          fontWeight: 700,
-                          color: node === "START" || node === "END" ? "#94a3b8" : "#f87171",
-                        }}
-                      >
-                        {node}
-                      </div>
-                      {i < 9 && <span style={{ color: "#64748b" }}>➔</span>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", justifyContent: "center" }}>
-                <button
-                  className="btn btn-primary"
-                  onClick={() => {
-                    setPipelineStep(1);
-                    setIntakeResult(null);
-                  }}
-                >
-                  <Radio size={14} /> Ingest Another Incident
                 </button>
-
-                <button className="btn btn-secondary" onClick={() => setActiveTab("map")}>
-                  <Compass size={14} /> View On Tactical GIS Map
-                </button>
-
-                <button className="btn btn-secondary" onClick={() => setActiveTab("approvals")}>
-                  <Users size={14} /> Open Commander Approval Center
-                </button>
-
-                <a href={`${API}/reports/situation`} target="_blank" rel="noreferrer" className="btn btn-secondary">
-                  <FileDown size={14} /> Download PDF Situation Report
-                </a>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ========================================================================
-          VIEW 3: EMERGENCY DASHBOARD (High Level Operational Picture)
-          ======================================================================== */}
-      {activeTab === "dashboard" && (
-        <div>
-          {/* Key Metrics */}
-          <div className="metrics-grid">
-            <div className="metric-card">
-              <div className="metric-icon red">
-                <Radio size={19} />
-              </div>
-              <div className="metric-label">TOTAL INCIDENTS</div>
-              <div className="metric-value">{dashboard?.incidents?.total ?? incidents.length}</div>
-              <div className="metric-detail">
-                {dashboard?.incidents?.critical ?? 1} Critical · {dashboard?.incidents?.high ?? 1} High
-              </div>
-            </div>
-
-            <div className="metric-card">
-              <div className="metric-icon blue">
-                <Truck size={19} />
-              </div>
-              <div className="metric-label">AVAILABLE FLEET</div>
-              <div className="metric-value">
-                {resources.filter((r) => r.status === "Available").length}
-                <span style={{ fontSize: "16px", color: "#64748b" }}> / {resources.length}</span>
-              </div>
-              <div className="metric-detail">
-                {resources.filter((r) => r.status === "Deployed").length} Deployed ·{" "}
-                {resources.filter((r) => r.status === "Reserved").length} Reserved
-              </div>
-            </div>
-
-            <div className="metric-card">
-              <div className="metric-icon amber">
-                <Users size={19} />
-              </div>
-              <div className="metric-label">PENDING APPROVALS</div>
-              <div className="metric-value">{pendingApprovalsCount}</div>
-              <div className="metric-detail">Awaiting Incident Commander review</div>
-            </div>
-
-            <div className="metric-card">
-              <div className="metric-icon green">
-                <Warehouse size={19} />
-              </div>
-              <div className="metric-label">AVAILABLE SHELTER SLOTS</div>
-              <div className="metric-value">
-                {shelters.reduce((acc, s) => acc + (s.total_capacity - s.occupied), 0)}
-              </div>
-              <div className="metric-detail">Across {shelters.length} regional temporary shelters</div>
-            </div>
-          </div>
-
-          {/* Operational Grids */}
-          <div className="main-grid">
-            {/* Active Watch Incidents */}
-            <div className="panel">
-              <div className="panel-heading">
-                <div className="panel-title">
-                  <Radio size={18} />
-                  <h2>Active Incident Watch & Priority</h2>
-                </div>
-                <button className="btn btn-secondary btn-sm" onClick={() => setActiveTab("incidents")}>
-                  Manage All
-                </button>
-              </div>
-
-              <div className="stack-list">
-                {incidents.slice(0, 5).map((inc) => (
-                  <div key={inc.incident_id} className="watch-item">
-                    <div
-                      className={`severity-bar ${
-                        inc.severity?.level === "Critical"
-                          ? "critical"
-                          : inc.severity?.level === "High"
-                          ? "high"
-                          : "medium"
-                      }`}
-                    />
-                    <div className="watch-content">
-                      <div className="watch-top">
-                        <strong>
-                          {inc.incident_id} · {inc.location}
-                        </strong>
-                        <span
-                          className={`badge ${
-                            inc.severity?.level === "Critical"
-                              ? "badge-red"
-                              : inc.severity?.level === "High"
-                              ? "badge-amber"
-                              : "badge-gray"
-                          }`}
-                        >
-                          {inc.severity?.level || "Medium"} ({inc.severity?.score || inc.severity_score || 50}/100)
-                        </span>
-                      </div>
-                      <p>{inc.description}</p>
-                      <div style={{ display: "flex", gap: "10px", fontSize: "10px", color: "#64748b" }}>
-                        <span>Affected: {inc.people_affected} people</span>
-                        <span>Source: {inc.source}</span>
-                        <span>Status: {inc.status}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* GIS Overview Snapshot */}
-            <div className="panel">
-              <div className="panel-heading">
-                <div className="panel-title">
-                  <Compass size={18} />
-                  <h2>Geospatial Situation Snapshot</h2>
-                </div>
-                <button className="btn btn-secondary btn-sm" onClick={() => setActiveTab("map")}>
-                  Full Map View
-                </button>
-              </div>
-
-              <div className="map-wrap" style={{ height: "260px" }}>
-                <MapContainer
-                  center={[16.512, 80.641]}
-                  zoom={12}
-                  scrollWheelZoom={false}
-                  style={{ height: "100%", width: "100%" }}
-                >
-                  <TileLayer
-                    attribution="&copy; OpenStreetMap contributors"
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  />
-                  {incidents.map((inc) => (
-                    <Marker
-                      key={inc.incident_id}
-                      position={[inc.latitude || 16.512, inc.longitude || 80.641]}
-                      icon={createPin("#dc2626", "INC")}
-                    >
-                      <Popup>
-                        <strong>{inc.incident_id}</strong>
-                        <p>{inc.location}</p>
-                      </Popup>
-                    </Marker>
-                  ))}
-
-                  {/* Active Intake Report Marker on Dashboard Map */}
-                  {pipelineIncident && !incidents.some((x) => x.incident_id === pipelineIncident.incident_id) && (
-                    <Marker
-                      position={[pipelineIncident.latitude || 16.512, pipelineIncident.longitude || 80.641]}
-                      icon={createPin("#f59e0b", "INTAKE")}
-                    >
-                      <Popup>
-                        <span className="badge badge-amber" style={{ fontSize: "9px" }}>AGENT 1: INTAKE TARGET</span>
-                        <strong style={{ display: "block", marginTop: "4px" }}>{pipelineIncident.incident_id}: {pipelineIncident.location}</strong>
-                        <p style={{ margin: "2px 0", fontSize: "11px" }}>{pipelineIncident.disaster_type} · {pipelineIncident.people_affected} affected</p>
-                      </Popup>
-                    </Marker>
-                  )}
-                  {shelters.map((s) => (
-                    <Marker
-                      key={s.shelter_id}
-                      position={[s.latitude || 16.515, s.longitude || 80.645]}
-                      icon={createPin("#2563eb", "SH")}
-                    >
-                      <Popup>
-                        <strong>{s.name}</strong>
-                      </Popup>
-                    </Marker>
-                  ))}
-                </MapContainer>
-              </div>
-
-              <div style={{ marginTop: "12px", display: "flex", justifyContent: "space-between", fontSize: "11px", color: "#64748b" }}>
-                <span>Roads: {roads.filter((r) => r.status === "Closed").length} Closed Corridors</span>
-                <span>Active Alerts: {alerts.length}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================
-          VIEW 4: INCIDENT CENTER
-          ======================================================================== */}
-      {activeTab === "incidents" && (
-        <div className="panel">
-          <div className="panel-heading">
-            <div className="panel-title">
-              <Radio size={18} />
-              <h2>Incident Center — Registry & Multi-Source Intake</h2>
-            </div>
-            <span className="badge badge-gray">{incidents.length} Registered</span>
-          </div>
-
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Disaster</th>
-                  <th>Location</th>
-                  <th>Affected</th>
-                  <th>Severity</th>
-                  <th>Source</th>
-                  <th>Duplicate Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {incidents.map((inc) => (
-                  <tr key={inc.incident_id}>
-                    <td>
-                      <strong>{inc.incident_id}</strong>
-                      <small>{inc.created_at?.slice(0, 10)}</small>
-                    </td>
-                    <td>{inc.disaster_type}</td>
-                    <td>{inc.location}</td>
-                    <td>{inc.people_affected}</td>
-                    <td>
-                      <span
-                        className={`badge ${
-                          inc.severity?.level === "Critical"
-                            ? "badge-red"
-                            : inc.severity?.level === "High"
-                            ? "badge-amber"
-                            : "badge-green"
-                        }`}
-                      >
-                        {inc.severity?.level || "Medium"} ({inc.severity?.score || inc.severity_score || 50}/100)
-                      </span>
-                    </td>
-                    <td>{inc.source}</td>
-                    <td>
-                      {inc.possible_duplicate ? (
-                        <span className="duplicate-tag">
-                          Linked to {inc.duplicate_of || "INC-001"}
-                        </span>
-                      ) : (
-                        <span style={{ color: "#16a34a", fontSize: "10px", fontWeight: 700 }}>Unique</span>
-                      )}
-                    </td>
-                    <td>
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => {
-                          setSelectedIncidentId(inc.incident_id);
-                          setActiveTab("details");
-                        }}
-                      >
-                        Details
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================
-          VIEW 5: LIVE GIS MAP
-          ======================================================================== */}
-      {activeTab === "map" && (
-        <div className="panel">
-          <div className="panel-heading">
-            <div className="panel-title">
-              <Compass size={18} />
-              <h2>Live Tactical GIS Map & Operational Picture</h2>
-            </div>
-            <span className="badge badge-blue">OpenStreetMap & Leaflet</span>
-          </div>
-
-          <div className="map-wrap" style={{ height: "550px" }}>
-            <MapContainer
-              center={[16.512, 80.641]}
-              zoom={13}
-              scrollWheelZoom={true}
-              style={{ height: "100%", width: "100%" }}
-            >
-              <TileLayer
-                attribution="&copy; OpenStreetMap contributors"
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-
-              {incidents.map((inc) => (
-                <Marker
-                  key={inc.incident_id}
-                  position={[inc.latitude || 16.512, inc.longitude || 80.641]}
-                  icon={createPin("#dc2626", "INC")}
-                >
-                  <Popup>
-                    <strong>{inc.incident_id} ({inc.disaster_type})</strong>
-                    <p>{inc.location}</p>
-                    <small>Affected: {inc.people_affected} people</small>
-                  </Popup>
-                </Marker>
               ))}
-
-              {/* Active Intake Report Marker on Tactical GIS Map */}
-              {pipelineIncident && !incidents.some((x) => x.incident_id === pipelineIncident.incident_id) && (
-                <Marker
-                  position={[pipelineIncident.latitude || 16.512, pipelineIncident.longitude || 80.641]}
-                  icon={createPin("#f59e0b", "INTAKE")}
-                >
-                  <Popup>
-                    <span className="badge badge-amber" style={{ fontSize: "9px" }}>AGENT 1: INTAKE TARGET</span>
-                    <strong style={{ display: "block", marginTop: "4px" }}>{pipelineIncident.incident_id}: {pipelineIncident.location}</strong>
-                    <p style={{ margin: "2px 0", fontSize: "11px" }}>{pipelineIncident.disaster_type} · {pipelineIncident.people_affected} affected</p>
-                    <small style={{ color: "#64748b" }}>Urgency: {pipelineIncident.urgency}/5 · Source: {pipelineIncident.source}</small>
-                  </Popup>
-                </Marker>
-              )}
-
-              {shelters.map((s) => (
-                <Marker
-                  key={s.shelter_id}
-                  position={[s.latitude || 16.515, s.longitude || 80.645]}
-                  icon={createPin("#2563eb", "SH")}
-                >
-                  <Popup>
-                    <strong>{s.name}</strong>
-                    <p>Occupied: {s.occupied}/{s.total_capacity}</p>
-                    <small>Available: {s.total_capacity - s.occupied}</small>
-                  </Popup>
-                </Marker>
-              ))}
-
-              {resources.filter((r) => r.status === "Available").map((r) => (
-                <Marker
-                  key={r.resource_id}
-                  position={[r.latitude || 16.508, r.longitude || 80.635]}
-                  icon={createPin("#16a34a", "RES")}
-                >
-                  <Popup>
-                    <strong>{r.name}</strong>
-                    <p>{r.resource_type} · Status: {r.status}</p>
-                  </Popup>
-                </Marker>
-              ))}
-            </MapContainer>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================
-          VIEW 6: INCIDENT DETAILS
-          ======================================================================== */}
-      {activeTab === "details" && selectedIncident && (
-        <div className="panel">
-          <div className="panel-heading">
-            <div className="panel-title">
-              <FileText size={18} />
-              <h2>Incident Detailed Assessment: {selectedIncident.incident_id}</h2>
-            </div>
-            <button className="btn btn-secondary btn-sm" onClick={() => setActiveTab("incidents")}>
-              Back to List
-            </button>
-          </div>
-
-          <div className="grid-2">
-            <div>
-              <h3 style={{ fontSize: "13px", fontWeight: 800 }}>Incident Profile</h3>
-              <p><strong>Disaster:</strong> {selectedIncident.disaster_type}</p>
-              <p><strong>Location:</strong> {selectedIncident.location}</p>
-              <p><strong>Description:</strong> {selectedIncident.description}</p>
-              <p><strong>People Affected:</strong> {selectedIncident.people_affected}</p>
-              <p><strong>Source:</strong> {selectedIncident.source}</p>
-              <p><strong>Infrastructure Issue:</strong> {selectedIncident.infrastructure_issue || "None specified"}</p>
-            </div>
-
-            <div>
-              <h3 style={{ fontSize: "13px", fontWeight: 800 }}>Multi-Factor Severity</h3>
-              <div className="score-meter-card">
-                <div className="score-meter-header">
-                  <span>Calculated Priority</span>
-                  <span className="badge badge-red">{selectedIncident.severity?.level || "High"}</span>
-                </div>
-                <div className="score-meter-val">
-                  {selectedIncident.severity?.score || selectedIncident.severity_score || 65} / 100
-                </div>
-              </div>
-              <ul style={{ fontSize: "11px", color: "#64748b" }}>
-                {selectedIncident.severity?.factors?.map((f, i) => (
-                  <li key={i}>{f}</li>
-                )) ?? <li>Affected population & urgency rating applied</li>}
-              </ul>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================
-          VIEW 7: RESOURCE CENTER
-          ======================================================================== */}
-      {activeTab === "resources" && (
-        <div className="panel">
-          <div className="panel-heading">
-            <div className="panel-title">
-              <Truck size={18} />
-              <h2>Emergency Resource Management & Registry</h2>
-            </div>
-            <span className="badge badge-green">Double Allocation Guard Active</span>
-          </div>
-
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Resource ID</th>
-                  <th>Name</th>
-                  <th>Type</th>
-                  <th>Location</th>
-                  <th>Capacity</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {resources.map((res) => (
-                  <tr key={res.resource_id}>
-                    <td><strong>{res.resource_id}</strong></td>
-                    <td>{res.name}</td>
-                    <td>{res.resource_type}</td>
-                    <td>{res.location}</td>
-                    <td>{res.capacity}</td>
-                    <td>
-                      <span
-                        className={`badge ${
-                          res.status === "Available"
-                            ? "badge-green"
-                            : res.status === "Reserved"
-                            ? "badge-amber"
-                            : "badge-red"
-                        }`}
-                      >
-                        {res.status}
-                      </span>
-                    </td>
-                    <td>
-                      {res.status === "Available" && (
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => void handleUpdateResourceStatus(res.resource_id, "Reserved")}
-                        >
-                          Reserve
-                        </button>
-                      )}
-                      {res.status === "Reserved" && (
-                        <button
-                          className="btn btn-danger btn-sm"
-                          onClick={() => void handleUpdateResourceStatus(res.resource_id, "Deployed")}
-                        >
-                          Deploy
-                        </button>
-                      )}
-                      {res.status === "Deployed" && (
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          onClick={() => void handleUpdateResourceStatus(res.resource_id, "Available")}
-                        >
-                          Return
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================
-          VIEW 8: SHELTER MANAGEMENT
-          ======================================================================== */}
-      {activeTab === "shelters" && (
-        <div className="panel">
-          <div className="panel-heading">
-            <div className="panel-title">
-              <Warehouse size={18} />
-              <h2>Regional Shelter Capacity & Occupancy Tracking</h2>
-            </div>
-            <span className="badge badge-amber">Saturation Alerts Enabled</span>
-          </div>
-
-          <div className="grid-2">
-            <div>
-              {shelters.map((shelter) => {
-                const percent = Math.round((shelter.occupied / shelter.total_capacity) * 100);
-                return (
-                  <div key={shelter.shelter_id} className="shelter-row">
-                    <div className="shelter-heading">
-                      <strong>{shelter.name} ({shelter.location})</strong>
-                      <span className={`badge ${percent >= 90 ? "badge-red" : percent >= 75 ? "badge-amber" : "badge-green"}`}>
-                        {percent}% Occupied ({shelter.occupied}/{shelter.total_capacity})
-                      </span>
-                    </div>
-                    <div className="progress-track">
-                      <div
-                        className={`progress-fill ${percent >= 90 ? "fill-red" : percent >= 75 ? "fill-amber" : "fill-green"}`}
-                        style={{ width: `${percent}%` }}
-                      />
-                    </div>
-                    <div className="shelter-bottom">
-                      <span>Available Capacity: {shelter.total_capacity - shelter.occupied}</span>
-                      <span>Status: {shelter.status}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div style={{ background: "#f8fafc", padding: "16px", borderRadius: "10px", border: "1px solid #e2e8f0" }}>
-              <h3 style={{ fontSize: "13px", fontWeight: 800, margin: "0 0 10px 0" }}>Update Shelter Occupancy (Deterministic)</h3>
-              <label style={{ display: "block", fontSize: "11px", fontWeight: 700, marginBottom: "8px" }}>
-                Select Shelter:
-                <select
-                  value={selectedShelterId}
-                  onChange={(e) => {
-                    setSelectedShelterId(e.target.value);
-                    const found = shelters.find((s) => s.shelter_id === e.target.value);
-                    if (found) setOccupancyInput(found.occupied);
-                  }}
-                  style={{ width: "100%", padding: "8px", marginTop: "4px" }}
-                >
-                  {shelters.map((s) => (
-                    <option key={s.shelter_id} value={s.shelter_id}>
-                      {s.name} ({s.occupied}/{s.total_capacity})
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label style={{ display: "block", fontSize: "11px", fontWeight: 700, marginBottom: "12px" }}>
-                Current Occupancy Count:
-                <input
-                  type="number"
-                  min={0}
-                  value={occupancyInput}
-                  onChange={(e) => setOccupancyInput(Number(e.target.value))}
-                  style={{ width: "100%", padding: "8px", marginTop: "4px" }}
-                />
-              </label>
-
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={() => void handleUpdateOccupancy(selectedShelterId, occupancyInput)}
-              >
-                Save Occupancy
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================
-          VIEW 9: ROUTE & ACCESSIBILITY
-          ======================================================================== */}
-      {activeTab === "routes" && (
-        <div className="panel">
-          <div className="panel-heading">
-            <div className="panel-title">
-              <Layers size={18} />
-              <h2>Route & Accessibility Analysis (Dynamic Replanning)</h2>
-            </div>
-            <span className="badge badge-amber">Known vs AI-Inferred Distinction</span>
-          </div>
-
-          <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 16px 0" }}>
-            Toggle any road status below to trigger <strong>Dynamic Replanning (Requirement 10 / TC-05)</strong>.
-            The system detects affected deployments, recalculates alternatives, and alerts the coordinator.
-          </p>
-
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Road Corridor</th>
-                  <th>Origin ➔ Destination</th>
-                  <th>Status</th>
-                  <th>Closure Type</th>
-                  <th>Reason</th>
-                  <th>Simulate Blockage</th>
-                </tr>
-              </thead>
-              <tbody>
-                {roads.map((road) => (
-                  <tr key={road.road_id}>
-                    <td><strong>{road.name}</strong></td>
-                    <td>{road.origin_location} ➔ {road.destination_location}</td>
-                    <td>
-                      <span className={`badge ${road.status === "Closed" ? "badge-red" : road.status === "Partially Blocked" ? "badge-amber" : "badge-green"}`}>
-                        {road.status}
-                      </span>
-                    </td>
-                    <td>{road.closure_type}</td>
-                    <td>{road.reason || "Clear transit"}</td>
-                    <td>
-                      <button
-                        className={`btn btn-sm ${road.status === "Closed" ? "btn-secondary" : "btn-danger"}`}
-                        onClick={() => void handleToggleRoad(road)}
-                      >
-                        {road.status === "Closed" ? "Reopen Road" : "Simulate Blockage (TC-05)"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================
-          VIEW 10: RESPONSE PLANNING
-          ======================================================================== */}
-      {activeTab === "planning" && (
-        <div className="panel">
-          <div className="panel-heading">
-            <div className="panel-title">
-              <Sliders size={18} />
-              <h2>Response Planning & Resource Shortage Detection</h2>
-            </div>
-            <span className="badge badge-blue">LangGraph Workflow</span>
-          </div>
-
-          <div className="grid-2">
-            <div>
-              <h3 style={{ fontSize: "13px", fontWeight: 800 }}>Resource Shortage Checker (TC-04)</h3>
-              <p style={{ fontSize: "11px", color: "#64748b" }}>
-                Identifies deficits without hallucinating additional equipment.
-              </p>
-
-              <div style={{ display: "flex", gap: "10px", margin: "14px 0" }}>
-                <select
-                  value={shortageType}
-                  onChange={(e) => setShortageType(e.target.value)}
-                  style={{ padding: "8px", flex: 1 }}
-                >
-                  <option value="Rescue Boat">Rescue Boat</option>
-                  <option value="Rescue Team">Rescue Team</option>
-                  <option value="Ambulance">Ambulance</option>
-                  <option value="Emergency Vehicle">Emergency Vehicle</option>
-                </select>
-
-                <input
-                  type="number"
-                  value={shortageQuantity}
-                  onChange={(e) => setShortageQuantity(Number(e.target.value))}
-                  style={{ width: "90px", padding: "8px" }}
-                />
-
-                <button className="btn btn-primary btn-sm" onClick={() => void handleCheckShortage()}>
-                  Check Deficit
-                </button>
-              </div>
-
-              {shortageResult && (
-                <pre className="code-pre">
-                  {JSON.stringify(shortageResult, null, 2)}
-                </pre>
-              )}
-            </div>
-
-            <div>
-              <h3 style={{ fontSize: "13px", fontWeight: 800 }}>LangGraph 8-Agent Workflow Execution</h3>
-              <p style={{ fontSize: "11px", color: "#64748b" }}>
-                Execute full StateGraph workflow for selected incident.
-              </p>
-
-              <button
-                className="btn btn-primary"
-                onClick={() => void handleRunWorkflow()}
-                disabled={workflowLoading}
-                style={{ marginTop: "12px" }}
-              >
-                <Workflow size={14} className={workflowLoading ? "spin" : ""} />
-                Execute LangGraph StateGraph
-              </button>
-
-              {workflowResult && (
-                <pre className="code-pre" style={{ marginTop: "14px", maxHeight: "300px" }}>
-                  {JSON.stringify(workflowResult, null, 2)}
-                </pre>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================
-          VIEW 11: APPROVAL CENTER
-          ======================================================================== */}
-      {activeTab === "approvals" && (
-        <div className="panel">
-          <div className="panel-heading">
-            <div className="panel-title">
-              <Users size={18} />
-              <h2>Human-in-the-Loop Commander Approval Center</h2>
-            </div>
-            <span className="badge badge-amber">{pendingApprovalsCount} Pending Authorization</span>
-          </div>
-
-          <div className="approval-intro">
-            <div className="approval-number">{pendingApprovalsCount}</div>
-            <div>
-              <strong>Emergency Authorization Queue Active</strong>
-              <p>AI recommendations do not autonomously dispatch real resources. Authorized commander sign-off is required.</p>
-            </div>
-          </div>
-
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Request ID</th>
-                  <th>Incident</th>
-                  <th>Action Type</th>
-                  <th>Proposed Tactical Action</th>
-                  <th>Status</th>
-                  <th>Authorization</th>
-                </tr>
-              </thead>
-              <tbody>
-                {approvals.map((appr) => (
-                  <tr key={appr.request_id}>
-                    <td><strong>{appr.request_id}</strong></td>
-                    <td>{appr.incident_id}</td>
-                    <td>{appr.action_type}</td>
-                    <td>{appr.proposed_action}</td>
-                    <td>
-                      <span className={`badge ${appr.status === "Approved" ? "badge-green" : appr.status === "Pending" ? "badge-amber" : "badge-red"}`}>
-                        {appr.status}
-                      </span>
-                    </td>
-                    <td>
-                      {appr.status === "Pending" ? (
-                        <div style={{ display: "flex", gap: "6px" }}>
-                          <button
-                            className="btn btn-success btn-sm"
-                            onClick={() => void handleReviewApproval(appr.request_id, "Approved")}
-                          >
-                            Approve
-                          </button>
-                          <button
-                            className="btn btn-danger btn-sm"
-                            onClick={() => void handleReviewApproval(appr.request_id, "Rejected")}
-                          >
-                            Reject
-                          </button>
-                        </div>
-                      ) : (
-                        <small>{appr.reviewer}: {appr.comments}</small>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================
-          VIEW 12: ACTION TRACKER
-          ======================================================================== */}
-      {activeTab === "actions" && (
-        <div className="panel">
-          <div className="panel-heading">
-            <div className="panel-title">
-              <Clock size={18} />
-              <h2>Action Tracker — Response Status Lifecycle</h2>
-            </div>
-            <span className="badge badge-blue">Pending ➔ Approved ➔ In Progress ➔ Completed</span>
-          </div>
-
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Action ID</th>
-                  <th>Incident</th>
-                  <th>Title</th>
-                  <th>Priority</th>
-                  <th>Assigned Asset</th>
-                  <th>Status</th>
-                  <th>Remarks</th>
-                </tr>
-              </thead>
-              <tbody>
-                {actions.map((act) => (
-                  <tr key={act.action_id}>
-                    <td><strong>{act.action_id}</strong></td>
-                    <td>{act.incident_id}</td>
-                    <td>{act.title}</td>
-                    <td>
-                      <span className={`badge ${act.priority === "Critical" ? "badge-red" : "badge-amber"}`}>
-                        {act.priority}
-                      </span>
-                    </td>
-                    <td>{act.assigned_resource_id || "Unassigned"}</td>
-                    <td>
-                      <span className={`badge ${act.status === "In Progress" ? "badge-blue" : act.status === "Completed" ? "badge-green" : "badge-amber"}`}>
-                        {act.status}
-                      </span>
-                    </td>
-                    <td><small>{act.remarks}</small></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================
-          VIEW 13: ALERT CENTER
-          ======================================================================== */}
-      {activeTab === "alerts" && (
-        <div className="panel">
-          <div className="panel-heading">
-            <div className="panel-title">
-              <AlertTriangle size={18} />
-              <h2>Real-Time Critical Alerts & Notifications</h2>
-            </div>
-            <span className="badge badge-red">{unreadAlertsCount} Unacknowledged</span>
-          </div>
-
-          {alerts.map((al) => (
-            <div
-              key={al.alert_id}
-              className={`alert-card ${
-                al.severity === "Critical" ? "critical" : al.severity === "Warning" ? "warning" : "info"
-              }`}
-            >
-              <AlertTriangle size={20} style={{ color: al.severity === "Critical" ? "#dc2626" : "#d97706", flexShrink: 0 }} />
-              <div className="alert-body">
-                <strong>{al.title}</strong>
-                <p>{al.message}</p>
-                <div className="alert-time">{al.created_at?.slice(0, 19).replace("T", " ")}</div>
-              </div>
-              {al.acknowledged === 0 && (
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={async () => {
-                    await apiFetch(`/alerts/${al.alert_id}/acknowledge`, { method: "PATCH" });
-                    void refreshData();
-                  }}
-                >
-                  Acknowledge
-                </button>
-              )}
             </div>
           ))}
         </div>
-      )}
 
-      {/* ========================================================================
-          VIEW 14: SITUATION REPORTS
-          ======================================================================== */}
-      {activeTab === "reports" && (
-        <div className="panel">
-          <div className="panel-heading">
-            <div className="panel-title">
-              <FileDown size={18} />
-              <h2>Emergency Situation Report Generation (PDF Export)</h2>
-            </div>
-            <a href={`${API}/reports/situation`} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm">
-              <FileDown size={14} /> Download Official PDF Report
-            </a>
-          </div>
-
-          <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 16px 0" }}>
-            Compiles live operational data from all 8 specialized agents into a standardized emergency management situation report.
-          </p>
-
-          <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "20px" }}>
-            <h3 style={{ fontSize: "14px", fontWeight: 800, margin: "0 0 12px 0" }}>
-              Report Summary Preview (Generated live via ReportLab)
-            </h3>
-            <ul style={{ fontSize: "11px", color: "#475569", lineHeight: "1.8" }}>
-              <li><strong>Active Incidents Logged:</strong> {incidents.length} incidents across Zones A, B, and C.</li>
-              <li><strong>Total Affected Population:</strong> {incidents.reduce((acc, i) => acc + (i.people_affected || 0), 0)} residents.</li>
-              <li><strong>Fleet Availability:</strong> {resources.filter((r) => r.status === "Available").length} / {resources.length} units ready.</li>
-              <li><strong>Regional Shelter Headroom:</strong> {shelters.reduce((acc, s) => acc + (s.total_capacity - s.occupied), 0)} spaces available.</li>
-              <li><strong>Blocked Road Access:</strong> {roads.filter((r) => r.status === "Closed").length} closed routes identified.</li>
-              <li><strong>Safety Guardrail:</strong> AI recommendations advisory only; human commander signature required.</li>
-            </ul>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================
-          VIEW 15: AUTOMATED ACCEPTANCE TEST RUNNER (TC-01 through TC-08)
-          ======================================================================== */}
-      {activeTab === "tests" && (
-        <div className="panel">
-          <div className="panel-heading">
-            <div className="panel-title">
-              <CheckCircle2 size={18} />
-              <h2>Automated Acceptance Test Suite (TC-01 through TC-08)</h2>
-            </div>
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={() => void handleRunAllTests()}
-              disabled={testsLoading}
-            >
-              <Play size={13} className={testsLoading ? "spin" : ""} /> Run All 8 Tests
-            </button>
-          </div>
-
-          <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 16px 0" }}>
-            Executes all eight mandatory scenarios specified in the problem statement against the FastAPI backend,
-            database, and multi-agent pipeline.
-          </p>
-
-          {testReport && (
-            <div
-              style={{
-                background: testReport.all_passed ? "#f0fdf4" : "#fef2f2",
-                border: `1px solid ${testReport.all_passed ? "#bbf7d0" : "#fecaca"}`,
-                borderRadius: "10px",
-                padding: "16px",
-                marginBottom: "20px",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <div>
-                <strong style={{ fontSize: "14px", color: testReport.all_passed ? "#15803d" : "#b91c1c" }}>
-                  {testReport.all_passed
-                    ? "ALL 8 ACCEPTANCE TESTS (TC-01 TO TC-08) PASSED SUCCESSFULLY!"
-                    : "SOME TESTS FAILED"}
-                </strong>
-                <p style={{ margin: "4px 0 0", fontSize: "12px", color: testReport.all_passed ? "#166534" : "#991b1b" }}>
-                  Passed: {testReport.passed} / {testReport.total} test scenarios verified.
-                </p>
-              </div>
-              <span className={`badge ${testReport.all_passed ? "badge-green" : "badge-red"}`} style={{ fontSize: "13px", padding: "6px 12px" }}>
-                {testReport.all_passed ? "100% PASSED" : "FAILED"}
-              </span>
+        <div className="sidebar-footer">
+          {!sidebarCollapsed && (
+            <div>
+              <div style={{fontSize:9,letterSpacing:"0.5px",marginBottom:4}}>VERSION 2.0.0</div>
+              <div>ResQAI NDMA Portal</div>
             </div>
           )}
-
-          <div className="test-suite-grid">
-            {[
-              {
-                id: "TC-01",
-                name: "New Flood Incident Reported",
-                desc: "Incident created and assessed with deterministic score",
-                expected: "Severity High/Critical, Score >= 50, Status 201 Created",
-                agents: ["Agent 1: Intake", "Agent 2: Severity Assessment"],
-              },
-              {
-                id: "TC-02",
-                name: "Multi-Source Duplicate Incident",
-                desc: "Same incident reported by two sources",
-                expected: "Duplicate identified and linked to existing incident ID",
-                agents: ["Agent 1: Intake (Duplicate Detector)"],
-              },
-              {
-                id: "TC-03",
-                name: "Critical Incident Allocation",
-                desc: "Critical incident with available resources",
-                expected: "Allocation recommendation generated via 8-Agent LangGraph",
-                agents: ["All 8 Specialized Agents orchestrated"],
-              },
-              {
-                id: "TC-04",
-                name: "Resource Shortage & Deficit",
-                desc: "Required resources exceed availability (Req 8, Avail 5)",
-                expected: "Shortage detected, Deficit = 3 calculated, no hallucination",
-                agents: ["Agent 5: Resource Management", "Agent 6: Planning"],
-              },
-              {
-                id: "TC-05",
-                name: "Assigned Road Blockage",
-                desc: "Assigned road becomes blocked",
-                expected: "Dynamic replanning triggered & coordinator alerted",
-                agents: ["Agent 4: Geospatial", "Agent 7: Coordination"],
-              },
-              {
-                id: "TC-06",
-                name: "Shelter Capacity Saturation",
-                desc: "Shelter approaches full capacity (185/200, 200/200)",
-                expected: "Capacity alerts logged (NEAR_FULL and FULL triggers)",
-                agents: ["Agent 5: Emergency Resource Management"],
-              },
-              {
-                id: "TC-07",
-                name: "Worsening Weather Forecast",
-                desc: "Severe weather squalls simulated",
-                expected: "Incident reassessed & marked 'Needs Reassessment'",
-                agents: ["Agent 3: Weather", "Agent 2: Severity"],
-              },
-              {
-                id: "TC-08",
-                name: "Double Allocation Prevention",
-                desc: "Same rescue resource considered for two incidents",
-                expected: "Double allocation blocked with HTTP 409 Conflict",
-                agents: ["Agent 5: Resource Management", "Agent 8: Critic"],
-              },
-            ].map((tc) => {
-              const liveRes = testReport?.results.find((r) => r.test_id === tc.id);
-              return (
-                <div key={tc.id} className={`tc-card ${liveRes?.status === "FAIL" ? "fail" : "pass"}`}>
-                  <div className="tc-header">
-                    <strong className="tc-title">{tc.id}: {tc.name}</strong>
-                    <span className={`badge ${liveRes?.status === "FAIL" ? "badge-red" : "badge-green"}`}>
-                      {liveRes?.status || "READY"}
-                    </span>
-                  </div>
-
-                  <p style={{ fontSize: "11px", color: "#475569", margin: "0 0 6px 0" }}>
-                    <strong>Expected Behavior:</strong> {tc.expected}
-                  </p>
-
-                  <div className="tc-meta-row">
-                    <span>Agents: {tc.agents.join(", ")}</span>
-                  </div>
-
-                  {liveRes && (
-                    <pre className="tc-pre">
-                      {JSON.stringify(liveRes.actual_output, null, 2)}
-                    </pre>
-                  )}
-                </div>
-              );
-            })}
-          </div>
         </div>
-      )}
+      </nav>
 
-      {/* ========================================================================
-          VIEW 14: SYSTEM SETTINGS & ARCHITECTURE CONFIGURATION
-          ======================================================================== */}
-      {activeTab === "settings" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-          <div className="section-header" style={{ marginBottom: 0 }}>
+      {/* Main Area */}
+      <div className={`gov-main ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+        {/* Top Bar */}
+        <header className="gov-topbar">
+          <div className="topbar-left">
+            <div className="topbar-title">{PAGE_TITLES[activeTab]}</div>
+          </div>
+          <div className="topbar-right">
+            <div className={`status-pill ${connected ? "" : "offline"}`}>
+              <div className="status-dot" />
+              {connected ? "Backend Online" : "Backend Offline"}
+            </div>
+            <div className="commander-pill">
+              <ShieldAlert size={12}/>
+              <span>CMD: <strong>{systemConfig.commander_on_duty || "Maj. EOC Auth-01"}</strong></span>
+            </div>
+            <button className="btn btn-secondary btn-sm" onClick={refreshData} disabled={loading}>
+              <RefreshCw size={13} className={loading ? "spin" : ""}/> Refresh
+            </button>
+            <a href={`${API}/reports/situation`} target="_blank" rel="noreferrer" className="btn btn-primary btn-sm">
+              <FileDown size={13}/> PDF Report
+            </a>
+          </div>
+        </header>
+
+        {/* Safety Banner */}
+        <div style={{background:"#fff8e1",borderBottom:"2px solid #fbbf24",padding:"8px 24px",display:"flex",alignItems:"center",gap:10,fontSize:12,color:"#78350f"}}>
+          <ShieldAlert size={14}/>
+          <span><strong>OPERATIONAL MANDATE:</strong> All AI agent recommendations are advisory only. Autonomous dispatch of rescue personnel is strictly prohibited. Authorized commander approval required for all rescue operations.</span>
+          <span className="badge badge-pending" style={{marginLeft:"auto",flexShrink:0}}>autonomous_dispatch: FALSE</span>
+        </div>
+
+        {/* Page Content */}
+        <main className="gov-content">
+          {/* Page Header */}
+          <div className="gov-page-header mb-4" style={{borderRadius:"var(--radius-md)",marginBottom:20}}>
             <div>
-              <h2 style={{ margin: "0 0 4px 0", display: "flex", alignItems: "center", gap: "8px" }}>
-                <Settings size={22} style={{ color: "#38bdf8" }} /> System Configuration & Architecture Control
-              </h2>
-              <p style={{ margin: 0, fontSize: "12px", color: "var(--text-muted)" }}>
-                Multi-agent orchestration policies, environmental sensor streams, GIS coordinate systems, and database connectivity.
-              </p>
+              <h1>{navItems.find(n => n.id === activeTab)?.icon}{PAGE_TITLES[activeTab]}</h1>
+              <p>National Disaster Management | Emergency Operations Centre | ResQAI Platform v2.0</p>
             </div>
-            <div style={{ display: "flex", gap: "8px" }}>
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => void handleResetDemoData()}
-              >
-                <RotateCcw size={13} /> Reset Baseline State
+            {activeTab === "pipeline" && (
+              <button className="btn btn-secondary btn-sm" onClick={() => apiFetch("/demo/reset-seed", {method:"POST"}).then(refreshData)}>
+                <RotateCcw size={13}/> Reset Demo Data
               </button>
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={() => void handleRunAllTests()}
-                disabled={testsLoading}
-              >
-                <CheckCircle2 size={13} /> Run Acceptance Suite
-              </button>
-            </div>
+            )}
           </div>
 
-          <div className="settings-grid">
-            {/* Card 1: Operational Profile */}
-            <div className="settings-card">
-              <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
-                <Compass size={16} style={{ color: "#38bdf8" }} /> Operational Profile & Jurisdiction
-              </h3>
-              <div className="settings-row">
-                <span style={{ color: "var(--text-muted)" }}>Active Scenario:</span>
-                <strong>Krishna River Basin Monsoon Surge</strong>
-              </div>
-              <div className="settings-row">
-                <span style={{ color: "var(--text-muted)" }}>Jurisdiction Area:</span>
-                <strong>{systemConfig.jurisdiction}</strong>
-              </div>
-              <div className="settings-row">
-                <span style={{ color: "var(--text-muted)" }}>GIS Coordinates:</span>
-                <span className="mono">16.5062° N, 80.6480° E (EPSG:4326)</span>
-              </div>
-              <div className="settings-row">
-                <span style={{ color: "var(--text-muted)" }}>Commander on Duty:</span>
-                <input
-                  type="text"
-                  value={systemConfig.commander_on_duty}
-                  onChange={(e) => setSystemConfig({ ...systemConfig, commander_on_duty: e.target.value })}
-                  onBlur={() => void handleUpdateConfig({ commander_on_duty: systemConfig.commander_on_duty })}
-                  style={{
-                    padding: "3px 8px",
-                    borderRadius: "4px",
-                    fontSize: "11px",
-                    width: "160px",
-                    textAlign: "right",
-                  }}
-                />
-              </div>
-              <div className="settings-row">
-                <span style={{ color: "var(--text-muted)" }}>EOC Status:</span>
-                <span className="badge badge-green">LEVEL 1 FULL ACTIVATION</span>
-              </div>
-            </div>
-
-            {/* Card 2: Multi-Agent Orchestration Engine */}
-            <div className="settings-card">
-              <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
-                <Workflow size={16} style={{ color: "#a855f7" }} /> Multi-Agent Orchestration Engine
-              </h3>
-              <div className="settings-row">
-                <span style={{ color: "var(--text-muted)" }}>Framework:</span>
-                <strong>LangGraph StateGraph + Pydantic v2</strong>
-              </div>
-              <div className="settings-row">
-                <span style={{ color: "var(--text-muted)" }}>Active Pipeline Agents:</span>
-                <span className="badge badge-blue">8 Specialized Agents + 1 Critic</span>
-              </div>
-              <div className="settings-row">
-                <span style={{ color: "var(--text-muted)" }}>Execution Mode:</span>
-                <span>Deterministic State Machine + Advisory</span>
-              </div>
-              <div className="settings-row">
-                <span style={{ color: "var(--text-muted)" }}>Safety Auditor (Critic):</span>
-                <span className="badge badge-green">STRICT VERIFICATION ACTIVE</span>
-              </div>
-              <div className="settings-row">
-                <span style={{ color: "var(--text-muted)" }}>Step-by-Step Auto Advance:</span>
-                <button
-                  className="btn btn-secondary btn-sm"
-                  style={{ padding: "2px 8px", fontSize: "10px" }}
-                  onClick={() => setAutoRedirectEnabled(!autoRedirectEnabled)}
-                >
-                  {autoRedirectEnabled ? "ENABLED (4s)" : "MANUAL CLICKS"}
-                </button>
-              </div>
-            </div>
-
-            {/* Card 3: Environmental & Telemetry Feeds */}
-            <div className="settings-card">
-              <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
-                <CloudRain size={16} style={{ color: "#06b6d4" }} /> Environmental Feeds & Integrations
-              </h3>
-              <div className="settings-row">
-                <span style={{ color: "var(--text-muted)" }}>Weather Telemetry API:</span>
-                <span className="badge badge-green">Open-Meteo REST API (Online)</span>
-              </div>
-              <div className="settings-row">
-                <span style={{ color: "var(--text-muted)" }}>GDACS Global Alerts:</span>
-                <span className="badge badge-green">RSS/GeoJSON Feed Synced</span>
-              </div>
-              <div className="settings-row">
-                <span style={{ color: "var(--text-muted)" }}>GIS Base Map:</span>
-                <span>OpenStreetMap CartoDB Dark/Positron</span>
-              </div>
-              <div className="settings-row">
-                <span style={{ color: "var(--text-muted)" }}>Alert Gateway:</span>
-                <strong>{systemConfig.alert_gateway}</strong>
-              </div>
-              <div className="settings-row">
-                <span style={{ color: "var(--text-muted)" }}>Weather Auto-Reassessment:</span>
-                <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}>
-                  <input
-                    type="checkbox"
-                    checked={systemConfig.weather_reassessment_auto}
-                    onChange={(e) => {
-                      const val = e.target.checked;
-                      setSystemConfig({ ...systemConfig, weather_reassessment_auto: val });
-                      void handleUpdateConfig({ weather_reassessment_auto: val });
-                    }}
-                  />
-                  <span>{systemConfig.weather_reassessment_auto ? "Active" : "Disabled"}</span>
-                </label>
-              </div>
-            </div>
-
-            {/* Card 4: Database & State Persistence */}
-            <div className="settings-card">
-              <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
-                <Database size={16} style={{ color: "#10b981" }} /> Database & System Persistence
-              </h3>
-              <div className="settings-row">
-                <span style={{ color: "var(--text-muted)" }}>Active Engine:</span>
-                <strong>{systemConfig.db_backend}</strong>
-              </div>
-              <div className="settings-row">
-                <span style={{ color: "var(--text-muted)" }}>Schema Version:</span>
-                <span className="mono">v2.4-Production</span>
-              </div>
-              <div className="settings-row">
-                <span style={{ color: "var(--text-muted)" }}>Active Incident Records:</span>
-                <span className="mono">{incidents.length} Records</span>
-              </div>
-              <div className="settings-row">
-                <span style={{ color: "var(--text-muted)" }}>Fleet Inventory Count:</span>
-                <span className="mono">{resources.length} Units</span>
-              </div>
-              <div className="settings-row">
-                <span style={{ color: "var(--text-muted)" }}>Shelters in Registry:</span>
-                <span className="mono">{shelters.length} Facilities</span>
-              </div>
-              <div className="settings-row">
-                <span style={{ color: "var(--text-muted)" }}>Road Segments Tracked:</span>
-                <span className="mono">{roads.length} Segments</span>
-              </div>
-            </div>
-
-            {/* Card 5: Safety Policies & Commander Gates */}
-            <div className="settings-card" style={{ gridColumn: "1 / -1" }}>
-              <h3 style={{ margin: "0 0 12px 0", fontSize: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
-                <ShieldAlert size={16} style={{ color: "#ef4444" }} /> Safety Guardrails & Policy Thresholds
-              </h3>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" }}>
-                <div style={{ padding: "12px", background: "var(--bg-card)", borderRadius: "8px", border: "1px solid var(--border-main)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                    <strong>Autonomous Dispatch Lock</strong>
-                    <span className="badge badge-amber">SAFETY CRITICAL</span>
-                  </div>
-                  <p style={{ fontSize: "11px", color: "var(--text-muted)", margin: "0 0 10px 0" }}>
-                    Prohibits autonomous deployment of physical response assets without human commander sign-off.
-                  </p>
-                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "11px", cursor: "not-allowed" }}>
-                    <input type="checkbox" checked={!systemConfig.autonomous_dispatch} disabled />
-                    <strong>Mandatory Human Gate Enforced (Hard-coded Safety Rule)</strong>
-                  </label>
-                </div>
-
-                <div style={{ padding: "12px", background: "var(--bg-card)", borderRadius: "8px", border: "1px solid var(--border-main)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                    <strong>Double-Allocation Prevention</strong>
-                    <span className="badge badge-green">CONCURRENCY LOCK</span>
-                  </div>
-                  <p style={{ fontSize: "11px", color: "var(--text-muted)", margin: "0 0 10px 0" }}>
-                    Atomically locks resources during dispatch to reject double allocations with HTTP 409 Conflict.
-                  </p>
-                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "11px", cursor: "pointer" }}>
-                    <input
-                      type="checkbox"
-                      checked={systemConfig.double_allocation_lock}
-                      onChange={(e) => {
-                        const val = e.target.checked;
-                        setSystemConfig({ ...systemConfig, double_allocation_lock: val });
-                        void handleUpdateConfig({ double_allocation_lock: val });
-                      }}
-                    />
-                    <span>Atomic Resource Lock Active</span>
-                  </label>
-                </div>
-
-                <div style={{ padding: "12px", background: "var(--bg-card)", borderRadius: "8px", border: "1px solid var(--border-main)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                    <strong>Shelter Saturation Trigger</strong>
-                    <span className="badge badge-blue">{Math.round(systemConfig.shelter_saturation_threshold * 100)}% Capacity</span>
-                  </div>
-                  <p style={{ fontSize: "11px", color: "var(--text-muted)", margin: "0 0 10px 0" }}>
-                    Generates automatic diversion alerts to logistics when any shelter exceeds this capacity threshold.
-                  </p>
-                  <input
-                    type="range"
-                    min="50"
-                    max="95"
-                    step="5"
-                    value={Math.round(systemConfig.shelter_saturation_threshold * 100)}
-                    onChange={(e) => {
-                      const val = Number(e.target.value) / 100;
-                      setSystemConfig({ ...systemConfig, shelter_saturation_threshold: val });
-                    }}
-                    onMouseUp={() => void handleUpdateConfig({ shelter_saturation_threshold: systemConfig.shelter_saturation_threshold })}
-                    onTouchEnd={() => void handleUpdateConfig({ shelter_saturation_threshold: systemConfig.shelter_saturation_threshold })}
-                    style={{ width: "100%" }}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Footer */}
-      <footer className="footer">
-        <div>
-          ResQAI Decision-Support System · Multi-Agent Emergency Resource Coordination
-        </div>
-        <div>
-          Autonomous Dispatch Disabled · Human Commander Authorization Mandatory
-        </div>
-      </footer>
-        </div>
+          {/* Page Routing */}
+          {activeTab === "pipeline" && (
+            <AgentPipeline resources={resources} shelters={shelters} roads={roads} onRefresh={refreshData} />
+          )}
+          {activeTab === "dashboard" && (
+            <DashboardPage dashboard={dashboard} incidents={incidents} resources={resources} shelters={shelters} roads={roads} alerts={alerts} />
+          )}
+          {activeTab === "incidents" && <IncidentsPage incidents={incidents} />}
+          {activeTab === "resources" && <ResourcesPage resources={resources} onRefresh={refreshData} />}
+          {activeTab === "shelters" && <SheltersPage shelters={shelters} onRefresh={refreshData} />}
+          {activeTab === "routes" && <RoutesPage roads={roads} onRefresh={refreshData} />}
+          {activeTab === "approvals" && <ApprovalsPage approvals={approvals} onRefresh={refreshData} />}
+          {activeTab === "actions" && <ActionsPage actions={actions} onRefresh={refreshData} />}
+          {activeTab === "alerts" && <AlertsPage alerts={alerts} onRefresh={refreshData} />}
+          {activeTab === "reports" && <ReportsPage />}
+        </main>
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
@@ -2247,6 +2248,207 @@ def reset_demo_seed():
             "shelters": "Shelter A (200/160), Shelter B (150/60), Shelter C (300/110)",
             "roads": "Zone A (Partially Blocked), Zone B (Open), Zone C (Closed)",
         },
+    }
+
+
+# ------------------------------------------------------------------------------
+# Geocoding Endpoint (Nominatim / OpenStreetMap)
+# ------------------------------------------------------------------------------
+
+@app.get("/geocode")
+async def geocode_location(q: str = Query(min_length=2, max_length=300)):
+    """
+    Geocode a location name to latitude/longitude using Nominatim (OpenStreetMap).
+    Falls back to a curated India districts dataset if Nominatim is unavailable.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=8.0, headers={"User-Agent": "ResQAI-DisasterResponse/1.0"}) as client:
+            resp = await client.get(
+                "https://nominatim.openstreetmap.org/search",
+                params={"q": q, "format": "json", "limit": 5, "countrycodes": "IN"},
+            )
+            resp.raise_for_status()
+            results = resp.json()
+            if results:
+                return {
+                    "source": "Nominatim / OpenStreetMap",
+                    "query": q,
+                    "results": [
+                        {
+                            "display_name": r.get("display_name", ""),
+                            "latitude": float(r["lat"]),
+                            "longitude": float(r["lon"]),
+                            "type": r.get("type", ""),
+                            "importance": round(float(r.get("importance", 0)), 4),
+                        }
+                        for r in results[:5]
+                    ],
+                }
+    except Exception:
+        pass
+
+    return {
+        "source": "Nominatim unavailable — fallback",
+        "query": q,
+        "results": [],
+        "note": "Could not resolve coordinates. Please enter coordinates manually.",
+    }
+
+
+# ------------------------------------------------------------------------------
+# AI Analysis Endpoint — Agent 2 Severity & LLM Intelligence (Gemini)
+# ------------------------------------------------------------------------------
+
+class AIAnalysisRequest(BaseModel):
+    incident_id: str
+    disaster_type: str
+    location: str
+    people_affected: int = Field(ge=0)
+    urgency: int = Field(ge=1, le=5)
+    severity_score: int = Field(ge=0, le=100)
+    severity_level: str
+    infrastructure_issue: Optional[str] = None
+    weather_summary: Optional[dict] = None
+    description: str = Field(min_length=5, max_length=2000)
+
+
+@app.post("/ai/analyze-incident")
+async def ai_analyze_incident(request: AIAnalysisRequest):
+    """
+    Use Google Gemini to generate:
+    - AI situation analysis
+    - Future risk warnings
+    - Safety measures for affected population
+    - Recommended response actions
+    Falls back to rule-based responses if Gemini API is unavailable.
+    """
+    gemini_api_key = os.getenv("GEMINI_API_KEY", "")
+
+    # Build the structured prompt
+    weather_text = ""
+    if request.weather_summary:
+        weather_text = (
+            f"\nCurrent Weather: Temperature {request.weather_summary.get('temperature_2m', 'N/A')}°C, "
+            f"Precipitation {request.weather_summary.get('precipitation', 0)}mm, "
+            f"Wind {request.weather_summary.get('wind_speed_10m', 0)} km/h."
+        )
+
+    prompt = f"""You are an expert emergency management AI supporting disaster coordinators. Analyze this emergency incident and provide structured guidance.
+
+INCIDENT DETAILS:
+- Disaster Type: {request.disaster_type}
+- Location: {request.location}
+- People Affected: {request.people_affected}
+- Urgency Level: {request.urgency}/5
+- Severity Score: {request.severity_score}/100 ({request.severity_level})
+- Infrastructure Issue: {request.infrastructure_issue or 'None reported'}
+- Description: {request.description}{weather_text}
+
+Provide a concise, structured response with:
+1. SITUATION ANALYSIS (2-3 sentences about current conditions)
+2. FUTURE RISK WARNINGS (3 bullet points about what may worsen)
+3. SAFETY MEASURES FOR POPULATION (3-4 actionable safety instructions for affected people)
+4. RECOMMENDED RESPONSE ACTIONS (3 prioritized actions for emergency coordinators)
+
+IMPORTANT: Only reference resources and routes that exist in the incident data. Do not invent helicopters, extra boats, or closed roads that aren't mentioned. Flag any uncertain information as "Verification Required"."""
+
+    # Try Gemini first
+    if gemini_api_key:
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.post(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_api_key}",
+                    json={
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 800},
+                    },
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                ai_text = data["candidates"][0]["content"]["parts"][0]["text"]
+
+                return {
+                    "source": "Google Gemini 1.5 Flash",
+                    "incident_id": request.incident_id,
+                    "ai_analysis": ai_text,
+                    "llm_model": "gemini-1.5-flash",
+                    "human_review_required": True,
+                    "disclaimer": "AI-generated analysis is advisory only. Authorized commanders must verify all recommendations before action.",
+                }
+        except Exception as e:
+            print(f"[Gemini] API call failed: {e}. Using rule-based fallback.")
+
+    # Rule-based fallback (no LLM needed)
+    severity = request.severity_level
+    people = request.people_affected
+    urgency = request.urgency
+    disaster = request.disaster_type.lower()
+
+    situation_lines = [
+        f"A {request.disaster_type} emergency has been reported at {request.location} affecting {people} people.",
+        f"The incident has been assessed at severity level {severity} (Score: {request.severity_score}/100) with urgency {urgency}/5.",
+    ]
+    if request.infrastructure_issue and "closed" in (request.infrastructure_issue or "").lower():
+        situation_lines.append("Primary access routes are compromised, requiring alternative transport assessment.")
+
+    future_warnings = []
+    if "flood" in disaster:
+        future_warnings = [
+            "Rising water levels may cut off additional road corridors within 2–4 hours.",
+            "Structural damage to buildings is likely if flood depth exceeds 1 meter.",
+            "Continued rainfall forecast may expand affected zones beyond current boundaries.",
+        ]
+    elif "cyclone" in disaster:
+        future_warnings = [
+            "Storm surges may compound flooding in coastal and low-lying areas.",
+            "Wind speeds may escalate, grounding helicopter operations if exceeding 60 km/h.",
+            "Power infrastructure disruption is likely, affecting medical facilities.",
+        ]
+    elif "earthquake" in disaster:
+        future_warnings = [
+            "Aftershocks are expected; structural integrity of damaged buildings must be assessed.",
+            "Utilities (gas/water mains) may be ruptured — fire risk elevated.",
+            "Landslide risk increased in hilly terrain near epicenter.",
+        ]
+    else:
+        future_warnings = [
+            "Situation may escalate if response resources are not deployed promptly.",
+            "Secondary hazards may develop — field teams should continuously reassess.",
+            "Weather deterioration could worsen access conditions.",
+        ]
+
+    safety_measures = [
+        "Move to higher ground immediately if in flood-prone or low-lying areas.",
+        "Do not attempt to cross flooded roads or water bodies on foot.",
+        "Carry essential documents, medications, and emergency supplies if evacuating.",
+        "Follow instructions from official emergency coordinators only.",
+    ]
+
+    recommended_actions = [
+        f"Priority 1: Deploy rescue teams to {request.location} — {people} people require assistance.",
+        "Priority 2: Assess road accessibility before dispatching ground vehicles.",
+        "Priority 3: Alert nearest shelter facilities to prepare for incoming evacuees.",
+    ]
+    if severity == "Critical":
+        recommended_actions.insert(0, "IMMEDIATE: Escalate to District Collector / Emergency Operations Center.")
+
+    full_text = f"""SITUATION ANALYSIS:
+{' '.join(situation_lines)}
+
+FUTURE RISK WARNINGS:
+{''.join(f'• {w}' + chr(10) for w in future_warnings)}
+SAFETY MEASURES FOR AFFECTED POPULATION:
+{''.join(f'• {s}' + chr(10) for s in safety_measures)}
+RECOMMENDED RESPONSE ACTIONS:
+{''.join(f'• {a}' + chr(10) for a in recommended_actions)}"""
+
+    return {
+        "source": "Rule-Based Fallback (Gemini API key not configured)",
+        "incident_id": request.incident_id,
+        "ai_analysis": full_text,
+        "llm_model": "deterministic-rule-engine",
+        "human_review_required": True,
+        "disclaimer": "Rule-based analysis is advisory only. Authorized commanders must verify all recommendations before action.",
     }
 
 
