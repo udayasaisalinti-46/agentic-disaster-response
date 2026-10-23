@@ -298,17 +298,21 @@ npm run build
 
 ## 8. Live Deployments
 
-* **Backend Deployment (Render):**
-  * Live URL: `https://resqai-backend-vflw.onrender.com`
-  * Swagger Docs: `https://resqai-backend-vflw.onrender.com/docs`
-  * Health Endpoint: `https://resqai-backend-vflw.onrender.com/health`
-  * Runtime: Python 3.12.8, Managed PostgreSQL (`resqai-db`)
-  * Configured via `render.yaml`
-* **Frontend Deployment (Vercel):**
-  * Deployed on Vercel via root `vercel.json` and `package.json`
-  * Framework: React 19 + TypeScript + Vite + Tailwind CSS + Leaflet GIS
-  * Build Command: `npm --prefix frontend-app run build`
-  * Output Directory: `frontend-app/dist`
+| Service | URL | Status |
+|---|---|---|
+| 🌐 **Frontend (Vercel)** | **[https://agentic-disaster-response.vercel.app](https://agentic-disaster-response.vercel.app)** | ✅ Live |
+| ⚙️ **Backend (Render)** | **[https://resqai-backend-vflw.onrender.com](https://resqai-backend-vflw.onrender.com)** | ✅ Live |
+| 📖 **API Docs (Swagger)** | [https://resqai-backend-vflw.onrender.com/docs](https://resqai-backend-vflw.onrender.com/docs) | ✅ Live |
+| 🏥 **Health Check** | [https://resqai-backend-vflw.onrender.com/health](https://resqai-backend-vflw.onrender.com/health) | ✅ Live |
+| 🤖 **Agents List** | [https://resqai-backend-vflw.onrender.com/agents](https://resqai-backend-vflw.onrender.com/agents) | ✅ Live |
+| 🧪 **Test Suite** | [https://resqai-backend-vflw.onrender.com/tests/run-all](https://resqai-backend-vflw.onrender.com/tests/run-all) | ✅ Live |
+| 📄 **Situation Report PDF** | [https://resqai-backend-vflw.onrender.com/reports/situation](https://resqai-backend-vflw.onrender.com/reports/situation) | ✅ Live |
+| 📦 **GitHub Repository** | [https://github.com/udayasaisalinti-46/agentic-disaster-response](https://github.com/udayasaisalinti-46/agentic-disaster-response) | ✅ Public |
+
+* **Backend Runtime:** Python 3.12.8, Managed PostgreSQL, LangGraph StateGraph
+* **Frontend Stack:** React 19 + TypeScript + Vite + Tailwind CSS + Leaflet GIS
+* **Build Command:** `npm --prefix frontend-app run build`
+* **Output Directory:** `frontend-app/dist`
 
 ---
 
