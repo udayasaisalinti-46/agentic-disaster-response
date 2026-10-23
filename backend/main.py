@@ -37,6 +37,143 @@ app.add_middleware(
 
 
 # ==============================================================================
+# Root Landing Page
+# ==============================================================================
+
+from fastapi.responses import HTMLResponse
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+def root_landing():
+    html = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ResQAI — Agentic Disaster Response API</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f3f7;color:#1a2535;min-height:100vh}
+    .header{background:#17375e;color:white;padding:0 32px;height:60px;display:flex;align-items:center;gap:14px;box-shadow:0 2px 8px rgba(0,0,0,0.2)}
+    .brand{font-size:22px;font-weight:800;letter-spacing:-0.5px}
+    .brand span{color:#ff6600}
+    .header-sub{font-size:11px;color:rgba(255,255,255,0.6);margin-top:2px}
+    .status-pill{margin-left:auto;background:#22c55e;color:white;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px}
+    .dot{width:7px;height:7px;border-radius:50%;background:white;animation:blink 1.5s infinite}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+    .main{max-width:900px;margin:32px auto;padding:0 20px}
+    .hero{background:white;border:1px solid #cdd6e0;border-radius:8px;padding:28px 32px;margin-bottom:20px;border-left:5px solid #17375e}
+    .hero h1{font-size:24px;font-weight:800;color:#17375e;margin-bottom:8px}
+    .hero p{font-size:14px;color:#5a6e82;line-height:1.6}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+    .card{background:white;border:1px solid #cdd6e0;border-radius:8px;overflow:hidden}
+    .card-header{background:#17375e;color:white;padding:10px 16px;font-size:12px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase}
+    .card-body{padding:12px 0}
+    .link-row{display:flex;align-items:center;padding:8px 16px;border-bottom:1px solid #f0f3f7;gap:10px;text-decoration:none;color:#1a2535;transition:background 0.1s}
+    .link-row:hover{background:#eff4fb}
+    .link-row:last-child{border-bottom:none}
+    .method{padding:2px 7px;border-radius:3px;font-size:10px;font-weight:800;flex-shrink:0}
+    .get{background:#eff6ff;color:#1d4ed8}
+    .post{background:#f0fdf4;color:#166534}
+    .patch{background:#fffbeb;color:#92400e}
+    .link-path{font-family:monospace;font-size:12px;font-weight:600;color:#0052a5;flex:1}
+    .link-desc{font-size:11px;color:#5a6e82}
+    .mandate{background:#fff8e1;border:1px solid #fbbf24;border-radius:8px;padding:14px 18px;margin-bottom:20px;display:flex;gap:12px;align-items:flex-start;font-size:12px;color:#78350f}
+    .mandate strong{display:block;margin-bottom:3px;font-size:13px}
+    .cta{text-align:center;margin-bottom:32px}
+    .cta a{display:inline-flex;align-items:center;gap:8px;padding:12px 28px;border-radius:6px;font-size:14px;font-weight:700;text-decoration:none;margin:0 6px;transition:all 0.15s}
+    .cta-primary{background:#17375e;color:white}
+    .cta-primary:hover{background:#0d2240}
+    .cta-secondary{background:white;color:#17375e;border:2px solid #17375e}
+    .cta-secondary:hover{background:#eff4fb}
+    .footer{text-align:center;font-size:11px;color:#8a9ab0;padding:20px 0 32px}
+    @media(max-width:600px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="brand">Res<span>Q</span>AI</div>
+      <div class="header-sub">Agentic AI Disaster Response & Emergency Resource Coordination System</div>
+    </div>
+    <div class="status-pill"><div class="dot"></div> API Online</div>
+  </div>
+
+  <div class="main">
+    <div class="hero">
+      <h1>🛡️ ResQAI Backend API v2.0</h1>
+      <p>Multi-agent emergency management platform with 8 specialized AI agents, LangGraph orchestration, geospatial intelligence, Google Gemini LLM integration, and human-in-the-loop commander authorization. All data persisted in PostgreSQL/SQLite.</p>
+    </div>
+
+    <div class="mandate">
+      <span style="font-size:20px">⚠️</span>
+      <div>
+        <strong>Operational Safety Mandate</strong>
+        All AI agent responses are advisory only. Autonomous dispatch of rescue personnel is <strong>strictly prohibited</strong>. Commander authorization required for all rescue operations. <code>automatic_dispatch: false</code> is hardcoded.
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="card-header">🚨 Incident Management</div>
+        <div class="card-body">
+          <a class="link-row" href="/incidents" target="_blank"><span class="method get">GET</span><span class="link-path">/incidents</span><span class="link-desc">List all incidents</span></a>
+          <a class="link-row" href="/docs#/default/create_incident_incidents_post" target="_blank"><span class="method post">POST</span><span class="link-path">/incidents</span><span class="link-desc">Report new incident</span></a>
+          <a class="link-row" href="/dashboard" target="_blank"><span class="method get">GET</span><span class="link-path">/dashboard</span><span class="link-desc">Dashboard metrics</span></a>
+          <a class="link-row" href="/alerts" target="_blank"><span class="method get">GET</span><span class="link-path">/alerts</span><span class="link-desc">System alerts</span></a>
+          <a class="link-row" href="/approvals" target="_blank"><span class="method get">GET</span><span class="link-path">/approvals</span><span class="link-desc">Authorization requests</span></a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">🚛 Resources & Logistics</div>
+        <div class="card-body">
+          <a class="link-row" href="/resources" target="_blank"><span class="method get">GET</span><span class="link-path">/resources</span><span class="link-desc">Fleet inventory</span></a>
+          <a class="link-row" href="/shelters" target="_blank"><span class="method get">GET</span><span class="link-path">/shelters</span><span class="link-desc">Shelter capacity</span></a>
+          <a class="link-row" href="/roads" target="_blank"><span class="method get">GET</span><span class="link-path">/roads</span><span class="link-desc">Road network status</span></a>
+          <a class="link-row" href="/allocations" target="_blank"><span class="method get">GET</span><span class="link-path">/allocations</span><span class="link-desc">Resource allocations</span></a>
+          <a class="link-row" href="/actions" target="_blank"><span class="method get">GET</span><span class="link-path">/actions</span><span class="link-desc">Response actions</span></a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">🤖 AI Agent Endpoints</div>
+        <div class="card-body">
+          <a class="link-row" href="/agents" target="_blank"><span class="method get">GET</span><span class="link-path">/agents</span><span class="link-desc">List all 8 agents</span></a>
+          <a class="link-row" href="/docs#/default/ai_analyze_incident_ai_analyze_incident_post" target="_blank"><span class="method post">POST</span><span class="link-path">/ai/analyze-incident</span><span class="link-desc">Gemini AI analysis</span></a>
+          <a class="link-row" href="/geocode?q=Hyderabad,Telangana" target="_blank"><span class="method get">GET</span><span class="link-path">/geocode?q=...</span><span class="link-desc">Geocoding (Nominatim)</span></a>
+          <a class="link-row" href="/weather?latitude=17.38&longitude=78.48" target="_blank"><span class="method get">GET</span><span class="link-path">/weather?lat&lon</span><span class="link-desc">Live weather data</span></a>
+          <a class="link-row" href="/docs#/default/reassess_route_routes_reassess_post" target="_blank"><span class="method post">POST</span><span class="link-path">/routes/reassess</span><span class="link-desc">OSRM route analysis</span></a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">📋 Reports & System</div>
+        <div class="card-body">
+          <a class="link-row" href="/reports/situation" target="_blank"><span class="method get">GET</span><span class="link-path">/reports/situation</span><span class="link-desc">Download PDF report</span></a>
+          <a class="link-row" href="/health" target="_blank"><span class="method get">GET</span><span class="link-path">/health</span><span class="link-desc">Health check</span></a>
+          <a class="link-row" href="/system/config" target="_blank"><span class="method get">GET</span><span class="link-path">/system/config</span><span class="link-desc">System configuration</span></a>
+          <a class="link-row" href="/docs" target="_blank"><span class="method get">GET</span><span class="link-path">/docs</span><span class="link-desc">Swagger UI docs</span></a>
+          <a class="link-row" href="/redoc" target="_blank"><span class="method get">GET</span><span class="link-path">/redoc</span><span class="link-desc">ReDoc API docs</span></a>
+        </div>
+      </div>
+    </div>
+
+    <div class="cta">
+      <a class="cta-primary" href="https://agentic-disaster-response.vercel.app" target="_blank">🌐 Open Frontend Portal</a>
+      <a class="cta-secondary" href="/docs" target="_blank">📖 Swagger API Docs</a>
+    </div>
+
+    <div class="footer">
+      ResQAI v2.0 · Agentic AI Disaster Response System · Government Emergency Management Platform<br/>
+      8 AI Agents · LangGraph · Google Gemini · Open-Meteo · OpenStreetMap Nominatim · OSRM Routing
+    </div>
+  </div>
+</body>
+</html>"""
+    return HTMLResponse(content=html, status_code=200)
+
+
+# ==============================================================================
 # Pydantic Schemas
 # ==============================================================================
 
